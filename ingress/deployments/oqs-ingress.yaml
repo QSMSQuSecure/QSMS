@@ -1,0 +1,11 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oqs-ingress
+spec:
+  containers:
+  - name: oqs-ingress-container
+    image: ccap24/oqs-ingress:1.1
+  imagePullSecrets:
+  - name: regcred
+
