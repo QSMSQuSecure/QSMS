@@ -23,25 +23,25 @@ typedef struct publicKey {
    u_int8_t PUB[SABER_PUBLICKEYBYTES];
 } pub_t;
 
-typedef struct Data {
+typedef struct User {
    id_t *id;
    bio_t *bio;
    pub_t *pub;
-} data_t;
+} user_t;
 
 typedef struct Database {
-   dataItem database[SIZE];
-} database_t;
+   user_t database[SIZE];
+} data_t;
 
-data_t init(id_t id, bio_t bio, pub_t pub);
+user_t init(id_t id, bio_t bio, pub_t pub);
 
 int hash(id_t id);
 
-int exists();
+int exists(id_t id);
 
-bool validate();
+bool validate(id_t id, bio_t bio);
 
-pub_t getPublicKey();
+pub_t getPublicKey(id_t id);
 
 void insert(data_t data, id_t id, bio_t bio, pub_t pub);
 
