@@ -6,14 +6,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "../PQC_IBE/Reference_Implementation_KEM/SABER_params.h"
+#include "../crypto/saber/Reference_Implementation_KEM/SABER_params.h"
 
 #define SIZE 65536
 #define BIOBYTES 128
 
 typedef struct identity {
    u_int8_t ID[SABER_SEEDBYTES];
-} id_t;
+} ID_t;
 
 typedef struct biometric {
    u_int8_t BIO[BIOBYTES];
@@ -24,7 +24,7 @@ typedef struct publicKey {
 } pub_t;
 
 typedef struct User {
-   id_t *id;
+   ID_t *id;
    bio_t *bio;
    pub_t *pub;
 } user_t;
@@ -33,21 +33,23 @@ typedef struct Database {
    user_t database[SIZE];
 } data_t;
 
-user_t init(id_t id, bio_t bio, pub_t pub);
+u_int16_t size(data_t data);
 
-u_int16_t hashIndex(id_t id);
+user_t init(ID_t id, bio_t bio, pub_t pub);
 
-u_int16_t find(id_t id);
+u_int16_t hashIndex(ID_t id);
 
-bool exists(id_t id);
+u_int16_t find(data_t data, ID_t id);
 
-bool validate(id_t id, bio_t bio);
+bool exists(data_t data, ID_t id);
 
-pub_t getPublicKey(id_t id);
+bool validate(data_t data, ID_t id, bio_t bio);
 
-void insert(data_t data, id_t id, bio_t bio, pub_t pub);
+pub_t getPublicKey(data_t data, ID_t id);
 
-void remove(data_t data, id_t id, bio_t bio);
+void insert(data_t data, ID_t id, bio_t bio, pub_t pub);
+
+void empty(data_t data, ID_t id, bio_t bio);
 
 void error(char *msg);
 

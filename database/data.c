@@ -1,130 +1,139 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <sys/types.h> 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include "../PQC_IBE/Reference_Implementation_KEM/SABER_params.h"
+#include "data.h"
 
-#define SIZE 200000
-#define BIOBYTES 128
+u_int16_t size(data_t data) {
 
+   u_int32_t i;
+   u_int16_t filled;
 
+   i = 0;
+   filled = 0;
 
-typedef struct DataItem {
-   u_int8_t ID[SABER_SEEDBYTES];
-   u_int8_t bio[BIOBYTES];
-   u_int8_t pub[SABER_PUBLICKEYBYTES];
-} dataItem;
+   while (i < SIZE) {
+	   
+      if ((*(data.database[i].id)).ID != NULL) filled++;
+      i++;
+   }
 
-dataItem *newItem(u_int8_t ID[SABER_SEEDBYTES], u_int8_t bio[BIOBYTES], u_int8_t pub[SABER_PUBLICKEYBYTES]) {
-   dataItem *new;
-   int i;
+   return filled;
+}
 
-   new = (dataItem*) malloc(sizeof(dataItem));
-   for (i = 0; i < SABER_SEEDBYTES; i++) new->ID[i] = ID[i];
-   for (i = 0; i < BIOBYTES; i++) new->bio[i] = bio[i];
-   for (i = 0; i < SABER_PUBLICKEYBYTES; i++) new->pub[i] = pub[i];
+user_t init(ID_t id, bio_t bio, pub_t pub) {
+
+   user_t new;
+   u_int16_t i;
+
+   new.id = malloc(sizeof(ID_t));
+   new.bio = malloc(sizeof(bio_t));
+   new.pub = malloc(sizeof(pub_t));
+   
+   for (i = 0; i < SABER_SEEDBYTES; i++) *((*(new.id)).ID + i) = *(id.ID + i);
+   for (i = 0; i < BIOBYTES; i++) *((*(new.bio)).BIO + i) = *(bio.BIO + i);
+   for (i = 0; i < SABER_PUBLICKEYBYTES; i++) *((*(new.pub)).PUB + i) = *(pub.PUB + i);
+   
    return new;
 }
 
-int hashCode(u_int8_t ID[SABER_SEEDBYTES]) {
-   return ((size_t)ID) % SIZE;
+u_int16_t hashIndex(ID_t id) {
+
+   return ((size_t)id.ID) % SIZE;
 }
 
-dataItem *search(dataItem *database[SIZE], u_int8_t ID[SABER_SEEDBYTES], u_int8_t bio[BIOBYTES]) {
+bool exists(data_t data, ID_t id) {
    
-   int i;
-   int numEq;
-	
-   //get the hash 
-   int hashIndex;
-   hashIndex = hashCode(ID);
-	
-   //move in array until an empty 
-   while(database[hashIndex] != NULL) {
+   bool found;
+   u_int32_t i;
+   u_int16_t j;
+   u_int16_t numEq;
+
+   found = false;
+   i = hashIndex(id);
+   
+   while (!found && i < SIZE) {
 
       numEq = 0;
-      if (database[hashIndex]->ID != NULL) {
-         for (i = 0; i < SABER_SEEDBYTES; i++) {
-            if (database[hashIndex]->ID[i] == ID[i]) numEq++;
-         }
-	 for (i = 0; i < BIOBYTES; i++) {
-	    if (database[hashIndex]->bio[i] == bio[i]) numEq++;
-	 }
+      for (j = 0; j < SABER_SEEDBYTES; j++) {
+
+         if (*((*(data.database[i].id)).ID + j) == *(id.ID + j)) numEq++;
       }
-      if (numEq == SABER_SEEDBYTES + BIOBYTES) return database[hashIndex];
       
-			
-      //go to next cell
-      ++hashIndex;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
+      if (numEq == SABER_SEEDBYTES) found = true;
+      i++;
    }
+
+   return found;
+}
+
+u_int16_t find(data_t data, ID_t id) {
+   
+   u_int16_t i;
+   u_int16_t numEq; 
+   u_int16_t j;
+      
+   i = hashIndex(id);
 	
-   return NULL;        
-}
-
-void insert(dataItem *database[SIZE], u_int8_t ID[SABER_SEEDBYTES], u_int8_t bio[BIOBYTES], u_int8_t pub[SABER_PUBLICKEYBYTES]) {
-
-   int i;
-   int hashIndex;
-   dataItem *item;
-
-   item = newItem(ID, bio, pub);
-
-   //get the hash 
-   hashIndex = hashCode(ID);
-
-   //move in array until an empty cell
-   while(database[hashIndex] != NULL) {
-      //go to next cell
-      hashIndex++;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
-   }
-
-   database[hashIndex] = item;
-   return;
-}
-
-void delete(dataItem *database[SIZE], u_int8_t ID[SABER_SEEDBYTES], u_int8_t bio[BIOBYTES]) {
-
-   int hashIndex;
-   int numEq;
-   int i;
-
-   //get the hash 
-   hashIndex = hashCode(ID);
-
-   //move in array until an empty
-   while(database[hashIndex] != NULL) {
+   while((*(data.database[i].id)).ID != NULL) {
 
       numEq = 0;
-      if (database[hashIndex]->ID != NULL) {
-         for (i = 0; i < SABER_SEEDBYTES; i++) {
-            if (database[hashIndex]->ID[i] == ID[i]) numEq++;
-         }
-	 for (i = 0; i < BIOBYTES; i++) {
-            if (database[hashIndex]->bio[i] == bio[i]) numEq++;
-	 }
+      for (j = 0; j < SABER_SEEDBYTES; j++) {
+     
+         if (*((*(data.database[i].id)).ID + j) == *(id.ID + j)) numEq++;
       }
-      if (numEq == SABER_SEEDBYTES + BIOBYTES) {
-         free((void*)(database[hashIndex]));
-	 database[hashIndex] = NULL;
-      }
-      //go to next cell
-      ++hashIndex;
-		
-      //wrap around the table
-      hashIndex %= SIZE;
+   
+      if (numEq == SABER_SEEDBYTES) return i;
+      i++;
+   }       
+}
+
+bool validate(data_t data, ID_t id, bio_t bio) {
+
+   u_int16_t i;
+   u_int16_t numEq;
+   u_int16_t j;
+
+   i = find(data, id);
+   numEq = 0;
+   
+   for (j = 0; j < BIOBYTES; j++) {
+
+      if (*((*(data.database[i].bio)).BIO + j) == *(bio.BIO + j)) numEq++;
    }
 
-   return;
+   if (numEq == BIOBYTES) return true;
+   return false;
+}
+
+pub_t getPublicKey(data_t data, ID_t id) {
+
+   u_int16_t i;
+
+   i = find(data, id);
+   return *(data.database[i].pub);
+}
+
+void insert(data_t data, ID_t id, bio_t bio, pub_t pub) {
+
+   u_int16_t i;
+
+   i = hashIndex(id);
+   while ((*(data.database[i].id)).ID != NULL) i++;
+
+   data.database[i] = init(id, bio, pub);
+}
+
+void empty(data_t data, ID_t id, bio_t bio) {
+
+   u_int16_t i;
+   
+   if (validate(data, id, bio)) {
+
+      i = find(data, id);
+      free(data.database[i].id);
+      free(data.database[i].bio);
+      free(data.database[i].pub);
+      data.database[i].id = NULL;
+      data.database[i].bio = NULL;
+      data.database[i].pub = NULL;
+   }
 }
 
 void error(char *msg) {
@@ -147,15 +156,21 @@ void dostuff (int sock)
 
 int main(int argc, char *argv[]) {
 
-   dataItem *database[SIZE];
-   u_int8_t ID[SABER_SEEDBYTES];
-   u_int8_t bio[BIOBYTES];
-   u_int8_t pub[SABER_PUBLICKEYBYTES];
-   int i;
+   data_t data;
+   ID_t id;
+   bio_t bio;
+   pub_t pub;
+   u_int32_t i;
+   
    int sockfd, newsockfd, portno, clilen, pid;
    struct sockaddr_in serv_addr, cli_addr;
 
-   for (i = 0; i < SIZE; i++) database[i] = NULL;
+   for (i = 0; i < SIZE; i++) {
+      
+      data.database[i].id = NULL;
+      data.database[i].bio = NULL;
+      data.database[i].pub = NULL;
+   }
 
    if (argc < 2) {
        fprintf(stderr,"ERROR, no port provided\n");
