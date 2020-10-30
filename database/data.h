@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include "../PQC_IBE/Reference_Implementation_KEM/SABER_params.h"
 
-#define SIZE 200000
+#define SIZE 65536
 #define BIOBYTES 128
 
 typedef struct identity {
@@ -35,9 +35,11 @@ typedef struct Database {
 
 user_t init(id_t id, bio_t bio, pub_t pub);
 
-int hash(id_t id);
+u_int16_t hashIndex(id_t id);
 
-int exists(id_t id);
+u_int16_t find(id_t id);
+
+bool exists(id_t id);
 
 bool validate(id_t id, bio_t bio);
 
