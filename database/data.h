@@ -35,8 +35,6 @@ typedef struct Database {
 
 u_int16_t size(data_t data);
 
-user_t init(ID_t id, bio_t bio, pub_t pub);
-
 u_int16_t hashIndex(ID_t id);
 
 u_int16_t find(data_t data, ID_t id);
