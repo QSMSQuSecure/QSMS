@@ -62,22 +62,26 @@ u_int16_t find(data_t *data, ID_t id) {
    u_int16_t i;
    u_int16_t numEq; 
    u_int16_t j;
+   bool found;
       
    i = hashIndex(id);
-	
-   while(data->database[i] != NULL) {
+   found = false;
+
+   while (!found) {
 
       numEq = 0;
-      for (j = 0; j < SABER_SEEDBYTES; j++) {
+      if (data->database[i] != NULL) {
+
+         for (j = 0; j < SABER_SEEDBYTES; j++) {
      
-         if (data->database[i]->id->ID[j] == id.ID[j]) numEq++;
+            if (data->database[i]->id->ID[j] == id.ID[j]) numEq++;
+         }
       }
-   
-      if (numEq == SABER_SEEDBYTES) return i;
-      i++;
+      if (numEq == SABER_SEEDBYTES) found = true;
+      if (!found) i++;
    }
 
-   return i;   
+   return i;
 }
 
 bool validate(data_t *data, ID_t id, bio_t bio) {
