@@ -11,8 +11,7 @@
 #define h1 (1 << (SABER_EQ - SABER_EP - 1))
 #define h2 ((1 << (SABER_EP - 2)) - (1 << (SABER_EP - SABER_ET - 1)) + (1 << (SABER_EQ - SABER_EP - 1)))
 
-void indcpa_kem_keypair(uint8_t pk[SABER_INDCPA_PUBLICKEYBYTES], uint8_t sk[SABER_INDCPA_SECRETKEYBYTES],
-			const uint8_t ID[SABER_SEEDBYTES]) // Take in ID of size SABER_SEEDBYTES
+void indcpa_kem_keypair(uint8_t pk[SABER_INDCPA_PUBLICKEYBYTES], uint8_t sk[SABER_INDCPA_SECRETKEYBYTES]) // const uint8_t ID[SABER_SEEDBYTES]) // Take in ID of size SABER_SEEDBYTES
 {
 	uint16_t A[SABER_L][SABER_L][SABER_N];
 	uint16_t s[SABER_L][SABER_N];
@@ -22,15 +21,15 @@ void indcpa_kem_keypair(uint8_t pk[SABER_INDCPA_PUBLICKEYBYTES], uint8_t sk[SABE
 	uint8_t seed_s[SABER_NOISE_SEEDBYTES];
 	int i, j;
 
-	for (i = 0; i < SABER_SEEDBYTES; i++) {
+	/*for (i = 0; i < SABER_SEEDBYTES; i++) {
 		seed_A[i] = 0x00; // Set default value
 	}
 
 	for (i = 0; i < SABER_SEEDBYTES; i++) {
 		seed_A[i] = ID[i]; // Copy ID to seed
-	}
+	}*/
 
-	// randombytes(seed_A, SABER_SEEDBYTES);
+	randombytes(seed_A, SABER_SEEDBYTES);
 	shake128(seed_A, SABER_SEEDBYTES, seed_A, SABER_SEEDBYTES); // for not revealing system RNG state
 	randombytes(seed_s, SABER_NOISE_SEEDBYTES);
 

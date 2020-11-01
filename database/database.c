@@ -1,38 +1,111 @@
 #include "data.c"
 #include "database.h"
+#include "../crypto/saber/Reference_Implementation_KEM/SABER_indcpa.c"
 
 pub_t *readBuf(data_t *data, buffer_t buffer) {
 
    u_int16_t i;
-   read_t r;
-   write_t w;
+   read_t *read;
+   write_t *write;
+
+   read = (read_t*) malloc(sizeof(read_t));
+   write = (write_t*) malloc(sizeof(write_t));
+   read->id = (ID_t*) malloc(sizeof(ID_t));
+   write->id = (ID_t*) malloc(sizeof(ID_t));
+   write->bio = (bio_t*) malloc(sizeof(bio_t));
 
    if (buffer.input[0] == 0x00) {
 
-      for (i = 0; i < READSIZE; i++) r.read[i] = buffer.input[i + 1];
-      return userRead(data, r);
+      free(write->id);
+      free(write->bio);
+      free(write);
+      for (i = 0; i < READSIZE; i++) read->id->ID[i] = buffer.input[i + 1];
+      return userRead(data, read);
    }
 
    else if (buffer.input[0] == 0x01) {
 
-      for (i = 0; i < WRITESIZE; i++) w.write[i] = buffer.input[i + 1];
-      return userWrite(data, w);
+      free(read->id);
+      free(read);
+      for (i = 0; i < READSIZE; i++) write->id->ID[i] = buffer.input[i + 1];
+      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buffer.input[i + 1]; 
+      return userWrite(data, write);
    }
+
+   free(read->id);
+   free(read);
+   free(write->id);
+   free(write->bio);
+   free(write);
 
    return NULL;
 }
 
-pub_t *userRead(data_t *data, read_t input) {
+pub_t *userReadPub(data_t *data, read_t *input) {
 
+   if (!(exists(data, input))) {
 
+      free(input->id);
+      free(input);
+      return NULL;
+   }
 
+   return getPublicKey(data, input);
 }
 
-pub_t *userWrite(data_t *data, read_t input) {
+pub_t *userWrite(data_t *data, write_t *input) {
 
+   read_t *output;
+   pub_t pk;
+   u_int8_t sk[SABER_INDCPA_SECRETKEYBYTES];
 
+   output = (read_t*) malloc(sizeof(read_t));
+   output->id = (ID_t*) malloc(sizeof(ID_t));
 
+   if (exists(data, output)) {
+
+      free(output->id);
+      free(output);
+      free(input->id);
+      free(input->bio);
+      free(input);
+      return NULL;
+   }
+
+   indcpa_kem_keypair(pk.PUB, sk);
+   // Do something with sk
+   insert(data, input, pk);
+
+   free(input->id);
+   free(input->bio);
+   free(input);
+
+   return getPublicKey(data, output);
 }
+
+/*pub_t *userReadSec(data_t *data, write_t *input) {
+
+   if (!(exists(data, input->id))) {
+
+      free(input->id);
+      free(input);
+      free(write->id);
+      free(write->bio);
+      free(write);
+      return NULL;
+   }
+   
+   if (!(validate(data, input->id, input->bio))) {
+
+      free(input->id);
+      free(input);
+      free(write->id);
+      free(write->bio);
+      free(write);
+      return NULL;
+   }
+
+}*/
   
 void error(char *msg) {
    

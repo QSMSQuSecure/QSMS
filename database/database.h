@@ -12,21 +12,22 @@ typdef struct Buffer {
 
 typedef struct Read {
 
-   u_int8_t read[READSIZE];
+   ID_t *id;
 
 } read_t;
 
 typedef struct Write {
 
-   u_int8_t write[WRITESIZE];
+   ID_t *id;
+   bio_t *bio;
 
 } write_t;
 
 pub_t *readBuf(data_t *data, buffer_t buffer);
 
-pub_t *userRead(data_t *data, read_t input);
+pub_t *userRead(data_t *data, read_t *input);
 
-pub_t *userWrite(data_t *data, write_t input);
+pub_t *userWrite(data_t *data, write_t *input);
 
 void dostuff(int sock);
 

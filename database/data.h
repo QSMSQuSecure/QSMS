@@ -20,7 +20,7 @@ typedef struct biometric {
 } bio_t;
 
 typedef struct publicKey {
-   u_int8_t PUB[SABER_PUBLICKEYBYTES];
+   u_int8_t PUB[SABER_INDCPA_PUBLICKEYBYTES];
 } pub_t;
 
 typedef struct User {
@@ -37,22 +37,19 @@ data_t *init(void);
 
 u_int16_t size(data_t *data);
 
-u_int16_t hashIndex(ID_t id);
+u_int16_t hashIndex(read_t *input);
 
-u_int16_t find(data_t *data, ID_t id);
+u_int16_t find(data_t *data, read_t *input);
 
-bool exists(data_t *data, ID_t id);
+bool exists(data_t *data, read_t *input);
 
-bool validate(data_t *data, ID_t id, bio_t bio);
+bool validate(data_t *data, write_t *input);
 
-pub_t *getPublicKey(data_t *data, ID_t id);
+pub_t *getPublicKey(data_t *data, read_t *input);
 
-void insert(data_t *data, ID_t id, bio_t bio, pub_t pub);
+void insert(data_t *data, write_t *input, pub_t pub);
 
-void empty(data_t *data, ID_t id);
+void empty(data_t *data, read_t *input);
 
 void freeData(data_t *data);
 
-pub_t userGetPublicKey(ID_t id);
-
-void userInquiry(ID_t id, bio_t bio);
