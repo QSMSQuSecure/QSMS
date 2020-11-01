@@ -30,26 +30,22 @@ typedef struct User {
 } user_t;
 
 typedef struct Database {
-   user_t database[SIZE];
+   user_t *database[SIZE];
 } data_t;
 
-u_int16_t size(data_t data);
+u_int16_t size(data_t *data);
 
 u_int16_t hashIndex(ID_t id);
 
-u_int16_t find(data_t data, ID_t id);
+u_int16_t find(data_t *data, ID_t id);
 
-bool exists(data_t data, ID_t id);
+bool exists(data_t *data, ID_t id);
 
-bool validate(data_t data, ID_t id, bio_t bio);
+bool validate(data_t *data, ID_t id, bio_t bio);
 
-pub_t getPublicKey(data_t data, ID_t id);
+pub_t *getPublicKey(data_t *data, ID_t id);
 
-void insert(data_t data, ID_t id, bio_t bio, pub_t pub);
+void insert(data_t *data, ID_t id, bio_t bio, pub_t pub);
 
-void empty(data_t data, ID_t id, bio_t bio);
-
-void error(char *msg);
-
-void newProcess(int sock);
+void empty(data_t *data, ID_t id, bio_t bio);
 
