@@ -1,5 +1,4 @@
 #include "data.h"
-#include "database.h"
 
 data_t *init(void) {
    
@@ -34,7 +33,7 @@ u_int16_t hashIndex(read_t *input) {
    return index;
 }
 
-bool exists(data_t *data, read_t input) {
+bool exists(data_t *data, read_t *input) {
    
    bool found;
    u_int32_t i;
@@ -99,10 +98,18 @@ bool validate(data_t *data, write_t *input) {
    u_int16_t i;
    u_int16_t numEq;
    u_int16_t j;
+   read_t *tmp;
 
-   i = find(data, input);
+   tmp = (read_t*) malloc(sizeof(read_t));
+   tmp->id = (ID_t*) malloc(sizeof(ID_t));
+
+   for (j = 0; j < READSIZE; j++) tmp->id[j] = input->id[j];
+   i = find(data, tmp);
+
+   free(tmp->id);
+   free(tmp);
+
    numEq = 0;
-   
    for (j = 0; j < BIOBYTES; j++) {
 
       if (data->database[i]->bio->BIO[j] == input->bio->BIO[j]) numEq++;
@@ -120,11 +127,11 @@ pub_t *getPublicKey(data_t *data, read_t *input) {
    return data->database[i]->pub;
 }
 
-void insert(data_t *data, write_t input, pub_t pub) {
+void insert(data_t *data, write_t *input, pub_t pub) {
 
    u_int16_t i;
    u_int16_t j;
-   read_t *temp;
+   read_t *tmp;
 
    tmp = (read_t*) malloc(sizeof(read_t));
    tmp->id = (ID_t*) malloc(sizeof(ID_t));
@@ -147,7 +154,7 @@ void insert(data_t *data, write_t input, pub_t pub) {
    for (j = 0; j < SABER_PUBLICKEYBYTES; j++) data->database[i]->pub->PUB[j] = pub.PUB[j];
 }
 
-void empty(data_t *data, read_t input) {
+void empty(data_t *data, read_t *input) {
 
    u_int16_t i;
 

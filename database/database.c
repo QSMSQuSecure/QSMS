@@ -1,8 +1,12 @@
-#include "data.c"
 #include "database.h"
 #include "../crypto/saber/Reference_Implementation_KEM/SABER_indcpa.c"
+#include "../crypto/saber/Reference_Implementation_KEM/poly.c"
+#include "../crypto/saber/Reference_Implementation_KEM/pack_unpack.c"
+#include "../crypto/saber/Reference_Implementation_KEM/rng.c"
+#include "../crypto/saber/Reference_Implementation_KEM/fips202.c"
+#include "../crypto/saber/Reference_Implementation_KEM/cbd.c"
 
-pub_t *readBuf(data_t *data, buffer_t buffer) {
+pub_t *readBuf(data_t *data, buffer_t buf) {
 
    u_int16_t i;
    read_t *read;
@@ -14,21 +18,21 @@ pub_t *readBuf(data_t *data, buffer_t buffer) {
    write->id = (ID_t*) malloc(sizeof(ID_t));
    write->bio = (bio_t*) malloc(sizeof(bio_t));
 
-   if (buffer.input[0] == 0x00) {
+   if (buf.input[0] == 0x00) {
 
       free(write->id);
       free(write->bio);
       free(write);
-      for (i = 0; i < READSIZE; i++) read->id->ID[i] = buffer.input[i + 1];
-      return userRead(data, read);
+      for (i = 0; i < READSIZE; i++) read->id->ID[i] = buf.input[i + 1];
+      return userReadPub(data, read);
    }
 
-   else if (buffer.input[0] == 0x01) {
+   else if (buf.input[0] == 0x01) {
 
       free(read->id);
       free(read);
-      for (i = 0; i < READSIZE; i++) write->id->ID[i] = buffer.input[i + 1];
-      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buffer.input[i + 1]; 
+      for (i = 0; i < READSIZE; i++) write->id->ID[i] = buf.input[i + 1];
+      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buf.input[i + 1]; 
       return userWrite(data, write);
    }
 

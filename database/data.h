@@ -10,6 +10,9 @@
 
 #define SIZE 65536
 #define BIOBYTES 128
+#define BUFFERSIZE (1 + SABER_SEEDBYTES + BIOBYTES + 1)
+#define READSIZE SABER_SEEDBYTES
+#define WRITESIZE (BUFFERSIZE - 2)
 
 typedef struct identity {
    u_int8_t ID[SABER_SEEDBYTES];
@@ -34,6 +37,25 @@ typedef struct Database {
 } data_t;
 
 data_t *init(void);
+
+typedef struct Buffer {
+
+   u_int8_t input[BUFFERSIZE];
+
+} buffer_t;
+
+typedef struct Read {
+
+   ID_t *id;
+
+} read_t;
+
+typedef struct Write {
+
+   ID_t *id;
+   bio_t *bio;
+
+} write_t;
 
 u_int16_t size(data_t *data);
 
