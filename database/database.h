@@ -1,8 +1,8 @@
 #include "data.h"
 
 #define BUFFERSIZE (1 + SABER_SEEDBYTES + BIOBYTES + 1)
-#define READSIZE (1 + SABER_SEEDBYTES + 1)
-#define WRITESIZE BUFFERSIZE
+#define READSIZE SABER_SEEDBYTES
+#define WRITESIZE (BUFFERSIZE - 2)
 
 typdef struct Buffer {
 
@@ -22,12 +22,12 @@ typedef struct Write {
 
 } write_t;
 
+pub_t *readBuf(data_t *data, buffer_t buffer);
+
+pub_t *userRead(data_t *data, read_t input);
+
+pub_t *userWrite(data_t *data, write_t input);
+
 void dostuff(int sock);
 
 void error(char *msg);
-
-pub_t readBuf(buffer_t buffer);
-
-pub_t *userRead(read_t input);
-
-pub_t *userWrite(write_t input);

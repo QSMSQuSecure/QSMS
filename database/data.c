@@ -2,7 +2,7 @@
 
 data_t *init(void) {
    
-   return malloc(sizeof(data_t));
+   return (data_t*) malloc(sizeof(data_t));
 }
 
 u_int16_t size(data_t *data) {

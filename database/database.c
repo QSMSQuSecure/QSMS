@@ -1,6 +1,39 @@
 #include "data.c"
 #include "database.h"
 
+pub_t *readBuf(data_t *data, buffer_t buffer) {
+
+   u_int16_t i;
+   read_t r;
+   write_t w;
+
+   if (buffer.input[0] == 0x00) {
+
+      for (i = 0; i < READSIZE; i++) r.read[i] = buffer.input[i + 1];
+      return userRead(data, r);
+   }
+
+   else if (buffer.input[0] == 0x01) {
+
+      for (i = 0; i < WRITESIZE; i++) w.write[i] = buffer.input[i + 1];
+      return userWrite(data, w);
+   }
+
+   return NULL;
+}
+
+pub_t *userRead(data_t *data, read_t input) {
+
+
+
+}
+
+pub_t *userWrite(data_t *data, read_t input) {
+
+
+
+}
+  
 void error(char *msg) {
    
    perror(msg);
