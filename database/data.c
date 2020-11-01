@@ -1,5 +1,10 @@
 #include "data.h"
 
+data_t *init(void) {
+   
+   return malloc(sizeof(data_t));
+}
+
 u_int16_t size(data_t *data) {
 
    u_int32_t i;
@@ -129,20 +134,27 @@ void insert(data_t *data, ID_t id, bio_t bio, pub_t pub) {
    for (j = 0; j < SABER_PUBLICKEYBYTES; j++) data->database[i]->pub->PUB[j] = pub.PUB[j];
 }
 
-void empty(data_t *data, ID_t id, bio_t bio) {
+void empty(data_t *data, ID_t id) {
 
    u_int16_t i;
-   
-   if (validate(data, id, bio)) {
 
-      i = find(data, id);
-      free(data->database[i]->id);
-      data->database[i]->id = NULL;
-      free(data->database[i]->bio);
-      data->database[i]->bio = NULL;
-      free(data->database[i]->pub);
-      data->database[i]->pub = NULL;
-      free(data->database[i]);
-      data->database[i] = NULL;
-   }
+   i = find(data, id);
+   free(data->database[i]->id);
+   data->database[i]->id = NULL;
+   free(data->database[i]->bio);
+   data->database[i]->bio = NULL;
+   free(data->database[i]->pub);
+   data->database[i]->pub = NULL;
+   free(data->database[i]);
+   data->database[i] = NULL;
 }
+
+void freeData(data_t *data) {
+   
+   free(data);
+}
+
+//pub_t userGetPublicKey(ID_t id)
+
+//void userInquiry(ID_t id, BIO_t bio)
+

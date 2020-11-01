@@ -33,6 +33,8 @@ typedef struct Database {
    user_t *database[SIZE];
 } data_t;
 
+data_t *init(void);
+
 u_int16_t size(data_t *data);
 
 u_int16_t hashIndex(ID_t id);
@@ -47,5 +49,10 @@ pub_t *getPublicKey(data_t *data, ID_t id);
 
 void insert(data_t *data, ID_t id, bio_t bio, pub_t pub);
 
-void empty(data_t *data, ID_t id, bio_t bio);
+void empty(data_t *data, ID_t id);
 
+void freeData(data_t *data);
+
+pub_t userGetPublicKey(ID_t id);
+
+void userInquiry(ID_t id, bio_t bio);

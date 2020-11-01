@@ -10,7 +10,7 @@ int main() {
    u_int32_t i;
    u_int16_t j;
 
-   data = (data_t*) malloc(sizeof(data_t));
+   data = init();
 
    for (i = 0; i < SIZE; i++) data->database[i] = NULL;
 
@@ -43,10 +43,10 @@ int main() {
       for (j = 2; j < BIOBYTES; j++) bio.BIO[j] = 0x00;
       for (j = 2; j < SABER_PUBLICKEYBYTES; j++) pub.PUB[j] = 0x00;
 
-      empty(data, id, bio);
+      empty(data, id);
    }
 
-   free(data);
+   freeData(data);
 
    return 0;
 }

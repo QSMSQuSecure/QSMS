@@ -1,4 +1,5 @@
 #include "data.c"
+#include "database.h"
 
 void error(char *msg) {
    
@@ -9,10 +10,10 @@ void error(char *msg) {
 void dostuff (int sock) {
    
    int n;
-   char buffer[256];
+   char buffer[BUFFERSIZE];
 
-   bzero(buffer,256);
-   n = read(sock,buffer,255);
+   bzero(buffer, BUFFERSIZE);
+   n = read(sock, buffer, BUFFERSIZE - 1);
    if (n < 0) error("ERROR reading from socket");
    printf("Here is the message: %s\n",buffer);
    n = write(sock,"I got your message",18);
