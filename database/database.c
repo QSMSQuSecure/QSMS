@@ -6,7 +6,7 @@
 #include "../crypto/saber/Reference_Implementation_KEM/fips202.c"
 #include "../crypto/saber/Reference_Implementation_KEM/cbd.c"
 
-pub_t *readBuf(data_t *data, buffer_t buf) {
+pub_t *readBuf(data_t *data, buffer_t *buf) {
 
    u_int16_t i;
    read_t *read;
@@ -18,21 +18,23 @@ pub_t *readBuf(data_t *data, buffer_t buf) {
    write->id = (ID_t*) malloc(sizeof(ID_t));
    write->bio = (bio_t*) malloc(sizeof(bio_t));
 
-   if (buf.input[0] == 0x00) {
+   if (buf->input[0] == 0x00) {
 
       free(write->id);
       free(write->bio);
       free(write);
-      for (i = 0; i < READSIZE; i++) read->id->ID[i] = buf.input[i + 1];
+
+      for (i = 0; i < READSIZE; i++) read->id->ID[i] = buf->input[i + 1];
       return userReadPub(data, read);
    }
 
-   else if (buf.input[0] == 0x01) {
+   else if (buf->input[0] == 0x01) {
 
       free(read->id);
       free(read);
-      for (i = 0; i < READSIZE; i++) write->id->ID[i] = buf.input[i + 1];
-      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buf.input[i + 1]; 
+
+      for (i = 0; i < READSIZE; i++) write->id->ID[i] = buf->input[i + 1];
+      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buf->input[i + 1]; 
       return userWrite(data, write);
    }
 
@@ -117,15 +119,21 @@ void error(char *msg) {
    exit(1);
 }
 
-void dostuff (int sock) {
+void dostuff (data_t *data, int sock) {
    
    int n;
-   char buffer[BUFFERSIZE];
+   buffer_t *buf;
+   pub_t *key;
+   u_int16_t i;
 
-   bzero(buffer, BUFFERSIZE);
-   n = read(sock, buffer, BUFFERSIZE - 1);
+   buf = (buffer_t*) malloc(sizeof(buffer_t));
+   bzero(buf->input, BUFFERSIZE);
+   n = read(sock, buf->input, BUFFERSIZE - 1);
+   for (i = 0; i < SABER_SEEDBYTES; i++) buf->input[i] -= (u_int8_t)48;
    if (n < 0) error("ERROR reading from socket");
-   printf("Here is the message: %s\n",buffer);
+   key = readBuf(data, buf);
+   for (i = 0; i < SABER_SEEDBYTES; i++) printf("%02x", key->PUB[i]); printf("\n");
+   free(buf);
    n = write(sock,"I got your message",18);
    if (n < 0) error("ERROR writing to socket");
 }
@@ -135,13 +143,16 @@ int main(int argc, char *argv[]) {
    int sockfd, newsockfd, portno, clilen, pid;
    struct sockaddr_in serv_addr, cli_addr;
 
+   data_t *data;
+   data = init();
+
    if (argc < 2) {
       fprintf(stderr,"ERROR, no port provided\n");
       exit(1);
    }
    sockfd = socket(AF_INET, SOCK_STREAM, 0);
    if (sockfd < 0) error("ERROR opening socket");
-   bzero((char *) &serv_addr, sizeof(serv_addr));
+   bzero((unsigned char *) &serv_addr, sizeof(serv_addr));
    portno = atoi(argv[1]);
    serv_addr.sin_family = AF_INET;
    serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -157,12 +168,13 @@ int main(int argc, char *argv[]) {
       if (pid == 0)  {
          
 	 close(sockfd);
-         dostuff(newsockfd);
+         dostuff(data, newsockfd);
 	 exit(0);
       }
     
       else close(newsockfd);
     }
 
+   freeData(data);
    return 0;
 }
