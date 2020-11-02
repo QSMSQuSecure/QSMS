@@ -62,11 +62,16 @@ pub_t *userReadPub(data_t *data, read_t *input) {
 pub_t *userWrite(data_t *data, write_t *input) {
 
    read_t *output;
-   pub_t pk;
+   pub_t *pk;
    u_int8_t sk[SABER_INDCPA_SECRETKEYBYTES];
+   u_int16_t i;
+
+   pk = (pub_t*) malloc(sizeof(pub_t));
 
    output = (read_t*) malloc(sizeof(read_t));
    output->id = (ID_t*) malloc(sizeof(ID_t));
+
+   for (i = 0; i < READSIZE; i++) output->id->ID[i] = input->id->ID[i];
 
    if (exists(data, output)) {
 
@@ -78,13 +83,16 @@ pub_t *userWrite(data_t *data, write_t *input) {
       return NULL;
    }
 
-   indcpa_kem_keypair(pk.PUB, sk);
+   indcpa_kem_keypair(pk->PUB, sk);
    // Do something with sk
+
    insert(data, input, pk);
 
    free(input->id);
    free(input->bio);
    free(input);
+
+   free(pk);
 
    return getPublicKey(data, output);
 }
@@ -129,10 +137,10 @@ void dostuff (data_t *data, int sock) {
    buf = (buffer_t*) malloc(sizeof(buffer_t));
    bzero(buf->input, BUFFERSIZE);
    n = read(sock, buf->input, BUFFERSIZE - 1);
-   for (i = 0; i < SABER_SEEDBYTES; i++) buf->input[i] -= (u_int8_t)48;
+   for (i = 0; i < READSIZE; i++) buf->input[i] -= (u_int8_t)48;
    if (n < 0) error("ERROR reading from socket");
    key = readBuf(data, buf);
-   for (i = 0; i < SABER_SEEDBYTES; i++) printf("%02x", key->PUB[i]); printf("\n");
+   for (i = 0; i < READSIZE; i++) printf("%u,", key->PUB[i]); printf("\n");
    free(buf);
    n = write(sock,"I got your message",18);
    if (n < 0) error("ERROR writing to socket");

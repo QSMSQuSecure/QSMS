@@ -69,7 +69,7 @@ bool validate(data_t *data, write_t *input);
 
 pub_t *getPublicKey(data_t *data, read_t *input);
 
-void insert(data_t *data, write_t *input, pub_t pub);
+void insert(data_t *data, write_t *input, pub_t *pub);
 
 void empty(data_t *data, read_t *input);
 

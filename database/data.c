@@ -2,7 +2,13 @@
 
 data_t *init(void) {
    
-   return (data_t*) malloc(sizeof(data_t));
+   data_t *data;
+   u_int32_t i;
+   
+   data = (data_t*) malloc(sizeof(data_t));
+   for (i = 0; i < SIZE; i++) data->database[i] = NULL;
+   
+   return data;
 }
 
 u_int16_t size(data_t *data) {
@@ -127,7 +133,7 @@ pub_t *getPublicKey(data_t *data, read_t *input) {
    return data->database[i]->pub;
 }
 
-void insert(data_t *data, write_t *input, pub_t pub) {
+void insert(data_t *data, write_t *input, pub_t *pub) {
 
    u_int16_t i;
    u_int16_t j;
@@ -136,7 +142,7 @@ void insert(data_t *data, write_t *input, pub_t pub) {
    tmp = (read_t*) malloc(sizeof(read_t));
    tmp->id = (ID_t*) malloc(sizeof(ID_t));
 
-   for (j = 0; j < READSIZE; j++) tmp->id[j] = input->id[j];
+   for (j = 0; j < READSIZE; j++) tmp->id->ID[j] = input->id->ID[j];
    i = hashIndex(tmp);
 
    free(tmp->id);
@@ -151,7 +157,7 @@ void insert(data_t *data, write_t *input, pub_t pub) {
 
    for (j = 0; j < SABER_SEEDBYTES; j++) data->database[i]->id->ID[j] = input->id->ID[j];
    for (j = 0; j < BIOBYTES; j++) data->database[i]->bio->BIO[j] = input->bio->BIO[j];
-   for (j = 0; j < SABER_PUBLICKEYBYTES; j++) data->database[i]->pub->PUB[j] = pub.PUB[j];
+   for (j = 0; j < SABER_PUBLICKEYBYTES; j++) data->database[i]->pub->PUB[j] = pub->PUB[j];
 }
 
 void empty(data_t *data, read_t *input) {
