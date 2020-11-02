@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netdb.h>
 #include <unistd.h>
+#include "data.h"
 
 void error(char *msg)
 {
@@ -20,7 +21,10 @@ int main(int argc, char *argv[])
     struct sockaddr_in serv_addr;
     struct hostent *server;
 
-    char buffer[256];
+    buffer_t *buf;
+
+    buf = (buffer_t*) malloc(sizeof(buffer_t));
+
     if (argc < 3) {
        fprintf(stderr,"usage %s hostname port\n", argv[0]);
        return 0;
@@ -43,15 +47,15 @@ int main(int argc, char *argv[])
     if (connect(sockfd,(struct sockaddr *)&serv_addr,sizeof(serv_addr)) < 0) 
         error("ERROR connecting");
     printf("Please enter the message: ");
-    bzero(buffer,256);
-    fgets(buffer,255,stdin);
-    n = write(sockfd,buffer,strlen(buffer));
+    bzero(buf->input,BUFFERSIZE);
+    fgets(buf->input,BUFFERSIZE-1,stdin);
+    n = write(sockfd,buf->input,BUFFERSIZE);
     if (n < 0) 
          error("ERROR writing to socket");
-    bzero(buffer,256);
-    n = read(sockfd,buffer,255);
+    bzero(buf->input,256);
+    n = read(sockfd,buf->input,BUFFERSIZE-1);
     if (n < 0) 
          error("ERROR reading from socket");
-    printf("%s\n",buffer);
+    //printf("%s\n",buf->input);
     return 0;
 }

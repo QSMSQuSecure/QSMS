@@ -34,7 +34,7 @@ pub_t *readBuf(data_t *data, buffer_t *buf) {
       free(read);
 
       for (i = 0; i < READSIZE; i++) write->id->ID[i] = buf->input[i + 1];
-      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buf->input[i + 1]; 
+      for (i = READSIZE; i < WRITESIZE; i++) write->bio->BIO[i - READSIZE] = buf->input[i]; 
       return userWrite(data, write);
    }
 
@@ -127,7 +127,7 @@ void error(char *msg) {
    exit(1);
 }
 
-void dostuff (data_t *data, int sock) {
+void readBuffer(data_t *data, int sock) {
    
    int n;
    buffer_t *buf;
@@ -136,17 +136,20 @@ void dostuff (data_t *data, int sock) {
 
    buf = (buffer_t*) malloc(sizeof(buffer_t));
    bzero(buf->input, BUFFERSIZE);
+
    n = read(sock, buf->input, BUFFERSIZE - 1);
-   for (i = 0; i < READSIZE; i++) buf->input[i] -= (u_int8_t)48;
+
+   for (i = 0; i < BUFFERSIZE; i++) buf->input[i] -= (u_int8_t)48;
+ 
    if (n < 0) error("ERROR reading from socket");
    key = readBuf(data, buf);
-   for (i = 0; i < READSIZE; i++) printf("%u,", key->PUB[i]); printf("\n");
+   for (i = 0; i < SABER_INDCPA_PUBLICKEYBYTES; i++) printf("%02x", key->PUB[i]); printf("\n\n");
    free(buf);
    n = write(sock,"I got your message",18);
    if (n < 0) error("ERROR writing to socket");
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) { 
 
    int sockfd, newsockfd, portno, clilen, pid;
    struct sockaddr_in serv_addr, cli_addr;
@@ -160,7 +163,7 @@ int main(int argc, char *argv[]) {
    }
    sockfd = socket(AF_INET, SOCK_STREAM, 0);
    if (sockfd < 0) error("ERROR opening socket");
-   bzero((unsigned char *) &serv_addr, sizeof(serv_addr));
+   bzero((buffer_t*) &serv_addr, sizeof(serv_addr));
    portno = atoi(argv[1]);
    serv_addr.sin_family = AF_INET;
    serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -171,17 +174,8 @@ int main(int argc, char *argv[]) {
    while (1) {
       newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
       if (newsockfd < 0) error("ERROR on accept");
-      pid = fork();
-      if (pid < 0) error("ERROR on fork");
-      if (pid == 0)  {
-         
-	 close(sockfd);
-         dostuff(data, newsockfd);
-	 exit(0);
-      }
-    
-      else close(newsockfd);
-    }
+      readBuffer(data, newsockfd);
+   }
 
    freeData(data);
    return 0;

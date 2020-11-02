@@ -6,6 +6,6 @@ pub_t *userReadPub(data_t *data, read_t *input);
 
 pub_t *userWrite(data_t *data, write_t *input);
 
-void dostuff(data_t *data, int sock);
+void readBuffer(data_t *data, int sock);
 
 void error(char *msg);
