@@ -1,0 +1,4 @@
+wireguard-y += ephemeral/cbd.o ephemeral/crypto_stream_aes256ctr.o
+wireguard-y += ephemeral/fips202.o ephemeral/fips202x4.o ephemeral/poly.o
+wireguard-y += ephemeral/pack_unpack.o ephemeral/SABER_indcpa.o
+wireguard-y += ephemeral/poly_mul.o ephemeral/kem.o

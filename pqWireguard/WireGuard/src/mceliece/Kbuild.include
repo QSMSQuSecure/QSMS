@@ -1,0 +1,18 @@
+
+ifeq ($(wildcard $(src)/keccak/align.h),)
+cmd_include_path_prefix := $(srctree)/$(src)
+else
+cmd_include_path_prefix := $(src)
+endif
+
+ccflags-y += -I$(cmd_include_path_prefix) -Wno-declaration-after-statement
+
+wireguard-y += mceliece/benes.o mceliece/bm.o mceliece/consts.o 
+wireguard-y += mceliece/decrypt.o mceliece/encrypt.o  mceliece/mcbuf.o
+wireguard-y += mceliece/fft.o mceliece/fft_tr.o mceliece/gf.o
+wireguard-y += mceliece/int32_minmax_x86.o mceliece/int32_sort.o
+wireguard-y += mceliece/operations.o mceliece/syndrome_asm.o
+wireguard-y += mceliece/transpose_64x128_sp_asm.o mceliece/transpose_64x256_sp_asm.o
+wireguard-y += mceliece/uint32_sort.o mceliece/update_asm.o mceliece/vec128_mul_asm.o
+wireguard-y += mceliece/vec256_ama_asm.o mceliece/vec256.o mceliece/vec256_maa_asm.o
+wireguard-y += mceliece/vec256_mul_asm.o mceliece/vec_reduce_asm.o mceliece/vec128.o
