@@ -861,9 +861,13 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 })
 #endif
 
-/*#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 5) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || LINUX_VERSION_CODE < KERNEL_VERSION(5, 3, 18)
+/*
+   The following code causes an error in make all and should be revisited
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 5) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || LINUX_VERSION_CODE < KERNEL_VERSION(5, 3, 18)
 #define ipv6_dst_lookup_flow(a, b, c, d) ipv6_dst_lookup(a, b, &dst, c) + (void *)0 ?: dst
-#endif*/
+#endif
+*/
 
 #if defined(ISUBUNTU1604)
 #include <linux/siphash.h>
