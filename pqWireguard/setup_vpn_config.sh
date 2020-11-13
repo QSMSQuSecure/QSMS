@@ -98,8 +98,7 @@ AllowedIPs = $CLIENT_IP6:3
 EOF
 
 # generate config for the clients
-# Added lines containing IP6
-SERVER_PUBKEY_PATH="$INSTALL_CONFIG_DIR/$SERVER_DIR/$SERVER_PUBKEY"
+# Added lines containing IP6 and changed paths
 
 cat <<EOF > "$CLIENT_DIR-1/$IF.conf"
 [Interface]
@@ -107,7 +106,7 @@ McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PRIKEY
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PUBKEY
 
 [Peer]
-McEliecePublicKey = $SERVER_PUBKEY_PATH
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$SERVER_PUBKEY
 Endpoint = $EXT_SERVER_IP:$SERVER_PORT
 Endpoint = $EXT_SERVER_IP6:$SERVER_PORT
 AllowedIPs = $SERVER_IP
@@ -120,7 +119,7 @@ McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PRIKEY
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PUBKEY
 
 [Peer]
-McEliecePublicKey = $SERVER_PUBKEY_PATH
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$SERVER_PUBKEY
 Endpoint = $EXT_SERVER_IP:$SERVER_PORT
 Endpoint = $EXT_SERVER_IP6:$SERVER_PORT
 AllowedIPs = $SERVER_IP
