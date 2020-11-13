@@ -1,10 +1,12 @@
 #!/bin/sh
 
+USER='chris' # Added user variable
+
 # set up config files for two clients and one server
 MKDIR='mkdir -p'
 SERVER_DIR=server
 CLIENT_DIR=client
-INSTALL_CONFIG_DIR='~/QSMS/pqWireguard' # Changed to match path
+INSTALL_CONFIG_DIR="/home/$USER/QSMS/pqWireguard" # Changed to match path
 SCRIPT='run.sh'
 PRIKEY=prikey
 PUBKEY=pubkey
@@ -77,32 +79,32 @@ $MKDIR "$CLIENT_DIR-2"
 genkey "$CLIENT_DIR-2" "$PRIKEY" "$PUBKEY"
 
 # generate the config for server
-# Added lines containing IP6
+# Added lines containing IP6 and changed paths
 cat <<EOF > "$SERVER_DIR/$IF.conf"
 [Interface]
-McEliecePrivateKey = $INSTALL_CONFIG_DIR/$PRIKEY
-McEliecePublicKey = $INSTALL_CONFIG_DIR/$PUBKEY
+McEliecePrivateKey = $INSTALL_CONFIG_DIR/$SERVER_DIR/$PRIKEY
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$SERVER_DIR/$PUBKEY
 ListenPort = $SERVER_PORT
 
 [Peer]
-McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_PUBKEY-1
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$SERVER_DIR/$CLIENT_PUBKEY-1
 AllowedIPs = $CLIENT_IP.2
 AllowedIPs = $CLIENT_IP6:2
 
 [Peer]
-McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_PUBKEY-2
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$SERVER_DIR/$CLIENT_PUBKEY-2
 AllowedIPs = $CLIENT_IP.3
 AllowedIPs = $CLIENT_IP6:3
 EOF
 
 # generate config for the clients
 # Added lines containing IP6
-SERVER_PUBKEY_PATH="$INSTALL_CONFIG_DIR/$SERVER_PUBKEY"
+SERVER_PUBKEY_PATH="$INSTALL_CONFIG_DIR/$SERVER_DIR/$SERVER_PUBKEY"
 
 cat <<EOF > "$CLIENT_DIR-1/$IF.conf"
 [Interface]
-McEliecePrivateKey = $INSTALL_CONFIG_DIR/$PRIKEY
-McEliecePublicKey = $INSTALL_CONFIG_DIR/$PUBKEY
+McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PRIKEY
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PUBKEY
 
 [Peer]
 McEliecePublicKey = $SERVER_PUBKEY_PATH
@@ -114,8 +116,8 @@ EOF
 
 cat <<EOF > "$CLIENT_DIR-2/$IF.conf"
 [Interface]
-McEliecePrivateKey = $INSTALL_CONFIG_DIR/$PRIKEY
-McEliecePublicKey = $INSTALL_CONFIG_DIR/$PUBKEY
+McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PRIKEY
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PUBKEY
 
 [Peer]
 McEliecePublicKey = $SERVER_PUBKEY_PATH
@@ -129,6 +131,7 @@ EOF
 gen_if_text() {
     IP=$1
     IP6=$2 # Added variable to take in IP6 address
+    DIR=$3 # Added third variable to take in directory name
     # Added line containing ip -6
     CMD=$(cat <<EOF
 #!/bin/sh
@@ -146,16 +149,17 @@ sudo ip link add dev $IF type wireguard
 sudo ip addr add $IP/$VPN_RANGE dev $IF
 sudo ip -6 addr add $IP6/$VPN_RANGE dev $IF
 sudo ip link set $IF up
-sudo $WG setconf $IF $INSTALL_CONFIG_DIR/$IF.conf
+sudo $WG setconf $IF $INSTALL_CONFIG_DIR/$DIR/$IF.conf
 EOF
 )
     echo "$CMD"
 }
 
 # Added second variable for IP6 address
-gen_if_text "$SERVER_IP" "$SERVER_IP6" > "$SERVER_DIR/$SCRIPT"
-gen_if_text "$CLIENT_IP.2" "$CLIENT_IP6:2" > "$CLIENT_DIR-1/$SCRIPT"
-gen_if_text "$CLIENT_IP.3" "$CLIENT_IP6:3" > "$CLIENT_DIR-2/$SCRIPT"
+# Added third variable for directory name
+gen_if_text "$SERVER_IP" "$SERVER_IP6" "$SERVER_DIR" > "$SERVER_DIR/$SCRIPT"
+gen_if_text "$CLIENT_IP.2" "$CLIENT_IP6:2" "$CLIENT_DIR-1" > "$CLIENT_DIR-1/$SCRIPT"
+gen_if_text "$CLIENT_IP.3" "$CLIENT_IP6:3" "$CLIENT_DIR-2" > "$CLIENT_DIR-2/$SCRIPT"
 
 chmod +x "$SERVER_DIR/$SCRIPT"
 chmod +x "$CLIENT_DIR-1/$SCRIPT"
