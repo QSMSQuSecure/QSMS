@@ -14,7 +14,7 @@ SERVER_PUBKEY="server-$PUBKEY"
 CLIENT_PUBKEY="client-$PUBKEY"
 
 # NOTE: fill in the actual ip address
-EXT_SERVER_IP='172.19.116.2'
+EXT_SERVER_IP='172.17.6.234'
 EXT_SERVER_IP6='fe80::215:5dff:fe00:811' # Added line for IP6
 VPN_RANGE=24
 SERVER_IP='10.0.0.1'
@@ -104,6 +104,7 @@ cat <<EOF > "$CLIENT_DIR-1/$IF.conf"
 [Interface]
 McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PRIKEY
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PUBKEY
+ListenPort = $SERVER_PORT
 
 [Peer]
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$SERVER_PUBKEY
@@ -111,12 +112,20 @@ Endpoint = $EXT_SERVER_IP:$SERVER_PORT
 Endpoint = $EXT_SERVER_IP6:$SERVER_PORT
 AllowedIPs = $SERVER_IP
 AllowedIPs = $SERVER_IP6
+
+[Peer]
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PUBKEY
+Endpoint =  172.17.7.104:$SERVER_PORT
+AllowedIPs = $CLIENT_IP.3
+AllowedIPs = $CLIENT_IP6:3
+
 EOF
 
 cat <<EOF > "$CLIENT_DIR-2/$IF.conf"
 [Interface]
 McEliecePrivateKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PRIKEY
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$PUBKEY
+ListenPort = $SERVER_PORT
 
 [Peer]
 McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-2/$SERVER_PUBKEY
@@ -124,6 +133,13 @@ Endpoint = $EXT_SERVER_IP:$SERVER_PORT
 Endpoint = $EXT_SERVER_IP6:$SERVER_PORT
 AllowedIPs = $SERVER_IP
 AllowedIPs = $SERVER_IP6
+
+[Peer]
+McEliecePublicKey = $INSTALL_CONFIG_DIR/$CLIENT_DIR-1/$PUBKEY
+Endpoint = 172.17.7.184:$SERVER_PORT
+AllowedIPs = $CLIENT_IP.2
+AllowedIPs = $CLIENT_IP6:2
+
 EOF
 
 # generate the start-up scripts for server and 2 clients
