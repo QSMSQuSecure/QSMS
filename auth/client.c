@@ -24,7 +24,7 @@
 // Driver code 
 int main() { 
     int sockfd;
-    char buffer[MAXLINE];
+    unsigned char *buffer;
     unsigned char *pk;
     unsigned char *sk;
     unsigned char *ct;
@@ -32,12 +32,17 @@ int main() {
     struct sockaddr_in servaddr;
     int i;
 
+    buffer = calloc(MAXLINE, 1);
     pk = calloc(CRYPTO_PUBLICKEYBYTES, 1);
     sk = calloc(CRYPTO_SECRETKEYBYTES, 1);
     ct = calloc(CRYPTO_CIPHERTEXTBYTES, 1);
     ss = calloc(CRYPTO_BYTES, 1);
 
     crypto_kem_keypair(pk, sk);
+
+    printf("Public Key: ");
+    for (i = 0; i < CRYPTO_PUBLICKEYBYTES; i++) printf("%02x", pk[i]);
+    printf("\n");
 
     // Creating socket file descriptor
     if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
@@ -48,13 +53,14 @@ int main() {
     // Filling server information
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
-    servaddr.sin_addr.s_addr = inet_addr("172.29.96.212");
+    servaddr.sin_addr.s_addr = inet_addr("172.29.105.100");
+
     int n, len;
-    sendto(sockfd, (const char *)pk, MAXLINE, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
-    printf("Public Key sent.\n");
-    n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
+    sendto(sockfd, (const unsigned char *)pk, MAXLINE, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+
+    n = recvfrom(sockfd, (unsigned char *)buffer, CRYPTO_CIPHERTEXTBYTES, MSG_WAITALL, (struct sockaddr *) &servaddr, &len);
     buffer[n] = '\0';
-    printf("Server: ");
+    printf("Ciphertext: ");
     for (i = 0; i < CRYPTO_CIPHERTEXTBYTES; i++) {
 	printf("%02x", buffer[i]);
     }
