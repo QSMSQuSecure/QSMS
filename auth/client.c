@@ -26,7 +26,7 @@ int main() {
     // Filling server information
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
-    servaddr.sin_addr.s_addr = inet_addr("10.0.0.14");
+    servaddr.sin_addr.s_addr = inet_addr("172.29.96.212");
     int n, len;
     sendto(sockfd, (const char *)hello, strlen(hello), MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr));
     printf("Hello message sent.\n");
