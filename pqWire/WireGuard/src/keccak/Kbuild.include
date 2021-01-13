@@ -1,0 +1,4 @@
+wireguard-y += keccak/KangarooTwelve.o keccak/KeccakHash.o keccak/KeccakP-1600-opt64.o
+wireguard-y += keccak/KeccakP-1600-times2-on1.o keccak/KeccakP-1600-times4-on1.o
+wireguard-y += keccak/KeccakP-1600-times8-on1.o keccak/KeccakSpongeWidth1600.o
+wireguard-y += keccak/SimpleFIPS202.o
