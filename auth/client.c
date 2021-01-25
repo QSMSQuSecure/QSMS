@@ -88,7 +88,7 @@ int main() {
     // Fill in server information
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(PORT);
-    servaddr.sin_addr.s_addr = inet_addr("172.29.105.100"); // Change to match server
+    servaddr.sin_addr.s_addr = inet_addr("172.28.221.223"); // Change to match server
     
     // Initialize constants
     iv_block = 12;
