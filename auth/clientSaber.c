@@ -14,23 +14,19 @@
 #include <arpa/inet.h> 
 #include <netinet/in.h> 
 #include <openssl/evp.h>
-#include <assert.h>
 
 // Load Key Encapsulation Mechanism files
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/api.h"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/cbd.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/fips202.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/indcpa.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/kem.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/ntt.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/poly.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/polyvec.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/reduce.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/rng.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/verify.c"
-#include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/symmetric-shake.c"
+#include "../crypto/saber/Reference_Implementation_KEM/api.h"
+#include "../crypto/saber/Reference_Implementation_KEM/rng.c"
+#include "../crypto/saber/Reference_Implementation_KEM/pack_unpack.c"
+#include "../crypto/saber/Reference_Implementation_KEM/poly.c"
+#include "../crypto/saber/Reference_Implementation_KEM/fips202.c"
+#include "../crypto/saber/Reference_Implementation_KEM/verify.c"
+#include "../crypto/saber/Reference_Implementation_KEM/cbd.c"
+#include "../crypto/saber/Reference_Implementation_KEM/SABER_indcpa.c"
+#include "../crypto/saber/Reference_Implementation_KEM/kem.c"
 
-#define PORT    8443 
+#define PORT    8080 
 
 int main() { 
     
@@ -141,7 +137,7 @@ int main() {
 	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv);
         EVP_EncryptUpdate(ctx, et, &len, cpk + (i * ct_block), ct_block);
         EVP_EncryptFinal_ex(ctx, et, &len);
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*)tag);
+        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, ct_block, (void*) tag);
 
 	// Format the block
         for (j = 0; j < ct_block; j++) {
