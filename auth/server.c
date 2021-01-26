@@ -246,7 +246,6 @@ int main() {
     // Compare the two strings of random bytes to ensure they match
     for (i = 0; i < full_block; i++) assert(rand1[i] == rand2[i]); // Step 25
 
-    /* Pointer arithmetic error
     free(rec);
     free(entropy);
     free(personal);
@@ -264,7 +263,6 @@ int main() {
     free(dt);
     free(final);
     EVP_CIPHER_CTX_free(ctx);
-    */
 
     // Close the socket
     close(sockfd);

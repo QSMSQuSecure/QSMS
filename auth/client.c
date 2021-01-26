@@ -244,7 +244,6 @@ int main() {
         sendto(sockfd, (const unsigned char *)final, full_block, MSG_CONFIRM, (const struct sockaddr *) &servaddr, sizeof(servaddr)); // Step 23
     }
 
-    /* Pointer arithmetic error
     free(rec);
     free(entropy);
     free(personal);
@@ -262,7 +261,6 @@ int main() {
     free(et);
     free(final);
     EVP_CIPHER_CTX_free(ctx);
-    */
 
     end = clock();
     printf("Cycles: %lu\n", end - start);
