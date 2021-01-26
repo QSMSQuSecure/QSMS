@@ -55,7 +55,8 @@ int main() {
     unsigned char *rand1; // Sent string of random bits
     unsigned char *rand2; // Received string of random bits
 
-    unsigned char *iv; // AES initialization vector
+    unsigned char *iv1; // AES initialization vector
+    unsigned char *iv2;
     unsigned char *tag; // AES authentication tag
     unsigned char *et; // Encrypted/Decrypted text
     unsigned char *final; // Block containing AES ciphertext and authentication tag
@@ -110,7 +111,8 @@ int main() {
     rand2 = calloc(full_block, 1);
     
     // Initialize variables used by AES
-    iv = calloc(iv_block, 1);
+    iv1 = calloc(iv_block, 1);
+    iv2 = calloc(iv_block, 1);
     tag = calloc(ct_block, 1);
     et = calloc(ct_block, 1);
     final = calloc(full_block, 1);
@@ -138,10 +140,12 @@ int main() {
 
 	// Step 4
 	// Symmetrically encrypt the public key with the first shared secret
-	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv);
+	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
         EVP_EncryptUpdate(ctx, et, &len, cpk + (i * ct_block), ct_block);
         EVP_EncryptFinal_ex(ctx, et, &len);
         EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*)tag);
+
+        iv1[iv_block - 1] += (unsigned char) 0x01; 
 
 	// Format the block
         for (j = 0; j < ct_block; j++) {
@@ -170,10 +174,12 @@ int main() {
 
 	// Step 11
 	// Symmetrically encrypt the random bytes with the first shared secret
-	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv);
+	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
         EVP_EncryptUpdate(ctx, et, &len, rand1 + (i * ct_block), ct_block);
         EVP_EncryptFinal_ex(ctx, et, &len);
         EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*) tag);
+
+        iv1[iv_block - 1] += (unsigned char) 0x01;
 
 	// Format the block
         for (j = 0; j < ct_block; j++) {
@@ -194,11 +200,13 @@ int main() {
 
 	// Step 16
 	// Symmetrically decrypt the random bytes with the second shared secret
-	EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv);
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv2);
 	EVP_DecryptUpdate(ctx, et, &len, rec, ct_block);
 	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, ct_block, (void*)tag);
 	n = EVP_DecryptFinal_ex(ctx, et, &len);
 	assert(n == 1); // Authenticate the ciphertext
+
+        iv2[iv_block - 1] += (unsigned char) 0x01;
 
 	for (j = 0; j < ct_block; j++) rand2[(i * ct_block) + j] = et[j]; // Store the random bytes
     }
@@ -216,11 +224,13 @@ int main() {
 
 	// Step 21
 	// Symmetrically decrypt the random bytes with the first shared secret
-	EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv);
+	EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
 	EVP_DecryptUpdate(ctx, et, &len, rec, ct_block);
 	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, ct_block, (void*)tag);
 	n = EVP_DecryptFinal_ex(ctx, et, &len);
 	assert(n == 1); // Authenticate the ciphertext
+
+        iv1[iv_block - 1] += (unsigned char) 0x01;
 
 	for (j = 0; j < ct_block; j++) rand2[(i * ct_block) + j] = et[j]; // Store the random bytes
     }
@@ -230,10 +240,12 @@ int main() {
 
         // Step 22
 	// Symmetrically encrypt the random bytes with the second shared secret	    
-	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv);
+	EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv2);
         EVP_EncryptUpdate(ctx, et, &len, rand2 + (i * ct_block), ct_block);
         EVP_EncryptFinal_ex(ctx, et, &len);
         EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*) tag);
+
+        iv2[iv_block - 1] += (unsigned char) 0x01;
 
 	// Format the block
         for (j = 0; j < ct_block; j++) {
@@ -256,7 +268,8 @@ int main() {
     free(rand1);
     free(rand2);
 
-    free(iv);
+    free(iv1);
+    free(iv2);
     free(tag);
     free(et);
     free(final);
