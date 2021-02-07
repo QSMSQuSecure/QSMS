@@ -56,8 +56,7 @@ int main() {
     unsigned char *rand1; // Sent string of random bits
     unsigned char *rand2; // Received string of random bits
 
-    unsigned char *iv1; // AES_GCM initialization vector for ss1
-    unsigned char *iv2; // AES_GCM initialization vector for ss2
+    unsigned char *iv; // Initialization vector
     unsigned char *tag1; // SHA3 authentication tag calculated
     unsigned char *tag2; // SHA3 authentication tag received
     unsigned char *et; // Encrypted/decrypted text
@@ -78,7 +77,7 @@ int main() {
     cipher_block = 16;
     key_block = 32;
     hash_block = 48;
-    max_block = CRYPTO_CIPHERTEXTBYTES + CRYPTO_PUBLICKEYBYTES + hash_block;
+    max_block = CRYPTO_CIPHERTEXTBYTES + cipher_block + CRYPTO_PUBLICKEYBYTES + hash_block;
            
     // Initialize variables used by KEM
     buf = calloc(max_block, 1);
@@ -94,8 +93,7 @@ int main() {
     rand2 = calloc(key_block, 1);
     
     // Initialize variables used by AES and SHA3
-    iv1 = calloc(cipher_block, 1);
-    iv2 = calloc(cipher_block, 1);
+    iv = calloc(cipher_block, 1);
     tag1 = calloc(hash_block, 1);
     tag2 = calloc(hash_block, 1);
     et = calloc(max_block, 1);
@@ -146,22 +144,26 @@ int main() {
 
     crypto_kem_dec(ss1, ct, server_sk); // Decapsulate the first shared secret
 
-    // Symmetrically decrypt the public key, MAC address, and authentication tag using the first shared secret
-    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
-    assert(EVP_DecryptUpdate(sctx, et, &len, buf + CRYPTO_CIPHERTEXTBYTES, CRYPTO_PUBLICKEYBYTES + hash_block));
-    assert(EVP_DecryptFinal_ex(sctx, et, &len));
+    memcpy(iv, buf + CRYPTO_CIPHERTEXTBYTES, cipher_block); // Store initialization vector
 
-    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
+    // Format the input buffer for AES
+    memcpy(input, buf + CRYPTO_CIPHERTEXTBYTES + cipher_block, CRYPTO_PUBLICKEYBYTES + hash_block);
+
+    // Symmetrically decrypt the public key, MAC address, and authentication tag using the first shared secret
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, CRYPTO_PUBLICKEYBYTES + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
 
     // Store the client public key and authentication tag, and format the input buffer for SHA-3
     memcpy(input, ct, CRYPTO_CIPHERTEXTBYTES);
+    memcpy(input + CRYPTO_CIPHERTEXTBYTES, iv, cipher_block);
     memcpy(client_pk, et, CRYPTO_PUBLICKEYBYTES);
     memcpy(tag1, et + CRYPTO_PUBLICKEYBYTES, hash_block);
-    memcpy(input + CRYPTO_CIPHERTEXTBYTES, client_pk, CRYPTO_PUBLICKEYBYTES);
+    memcpy(input + CRYPTO_CIPHERTEXTBYTES + cipher_block, client_pk, CRYPTO_PUBLICKEYBYTES);
 
-    // Hash the ciphertext and public key
+    // Hash the ciphertext, initialization vector, and public key
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
-    assert(EVP_DigestUpdate(hctx, input, CRYPTO_CIPHERTEXTBYTES + CRYPTO_PUBLICKEYBYTES));
+    assert(EVP_DigestUpdate(hctx, input, CRYPTO_CIPHERTEXTBYTES + cipher_block + CRYPTO_PUBLICKEYBYTES));
     assert(EVP_DigestFinal_ex(hctx, tag2, &len));
 
     assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the ciphertext and public key
@@ -174,7 +176,7 @@ int main() {
         for (i = 0; i < key_block; i++) printf("%02x", ss1[i]); printf("\n\n");
     #endif
  
-    // Hash the public key
+    // Hash the client public key
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
     assert(EVP_DigestUpdate(hctx, client_pk, CRYPTO_PUBLICKEYBYTES));
     assert(EVP_DigestFinal_ex(hctx, uid, &len));
@@ -182,10 +184,16 @@ int main() {
     assert(memcmp(uid, uid, hash_block) == 0); // Database placeholder
 
     crypto_kem_enc(ct, ss2, client_pk); // Encapsulate the second shared secret
-        
-    // Hash the ciphertext
+    
+    randombytes(iv, cipher_block); // Set intialization vector
+
+    // Format the input buffer for SHA-3
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, ct, CRYPTO_CIPHERTEXTBYTES);
+
+    // Hash the initialization vector and ciphertext
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
-    assert(EVP_DigestUpdate(hctx, ct, CRYPTO_CIPHERTEXTBYTES));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + CRYPTO_CIPHERTEXTBYTES));
     assert(EVP_DigestFinal_ex(hctx, tag1, &len));
 
     // Format the input buffer for AES
@@ -201,78 +209,95 @@ int main() {
     #endif
 
     // Symmetrically encrypt the ciphertext and authentication tag with the first shared secret
-    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
+    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
     assert(EVP_EncryptUpdate(sctx, et, &len, input, CRYPTO_CIPHERTEXTBYTES + hash_block));
     assert(EVP_EncryptFinal_ex(sctx, et, &len));
 
-    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
+    memcpy(buf, iv, cipher_block);
+    memcpy(buf + cipher_block, et, CRYPTO_CIPHERTEXTBYTES + hash_block); // Copy encrypted data to TCP buffer
 
-    memcpy(buf, et, CRYPTO_CIPHERTEXTBYTES + hash_block); // Copy encrypted data to TCP buffer
+    write(connfd, (const unsigned char *)buf, cipher_block + CRYPTO_CIPHERTEXTBYTES + hash_block); // Send over TCP
 
-    write(connfd, (const unsigned char *)buf, CRYPTO_CIPHERTEXTBYTES + hash_block); // Send over TCP
+    read(connfd, (unsigned char *)buf, cipher_block + key_block + hash_block); // Receive over TCP
 
-    read(connfd, (unsigned char *)buf, key_block + hash_block); // Receive over TCP
-    
+    memcpy(iv, buf, cipher_block); // Set initialization vector
+
+    // Format the input buffer for AES
+    memcpy(input, buf + cipher_block, key_block + hash_block); 
+
     // Symmetrically decrypt the random bytes and the authentication tag using the first shared secret
-    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
-    assert(EVP_DecryptUpdate(sctx, et, &len, buf, key_block + hash_block));
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, key_block + hash_block));
     assert(EVP_DecryptFinal_ex(sctx, et, &len));
-
-    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
 
     // Store the string of random bytes and the authentication tag
     memcpy(rand2, et, key_block);
     memcpy(tag1, et + key_block, hash_block);
 
-    // Hash the random bytes
+    // Format input buffer for SHA-3
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, rand2, key_block);
+
+    // Hash the initalization vector and random bytes
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
-    assert(EVP_DigestUpdate(hctx, rand2, key_block));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + key_block));
     assert(EVP_DigestFinal_ex(hctx, tag2, &len));
 
     assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the random bytes
     
     randombytes(rand1, key_block); // Generate random bytes for authentication
 
+    randombytes(iv, cipher_block);
+
     // Format the input buffer for SHA-3
-    memcpy(input, rand2, key_block);
-    memcpy(input + key_block, rand1, key_block);
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, rand2, key_block);
+    memcpy(input + cipher_block + key_block, rand1, key_block);
     
-    // Hash the two strings of random bytes
+    // Hash the initialization vector and two strings of random bytes
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
-    assert(EVP_DigestUpdate(hctx, input, key_block + key_block));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + key_block + key_block));
     assert(EVP_DigestFinal_ex(hctx, tag1, &len));
 
-    // Append the authentication tag to the input buffer
+    // Format the input buffer for AES
+    memcpy(input, rand2, key_block);
+    memcpy(input + key_block, rand1, key_block);
     memcpy(input + key_block + key_block, tag1, hash_block);
 
     // Symmetrically encrypt the two strings and the authentication tag using the second shared secret
-    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss2, iv2));
+    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss2, iv));
     assert(EVP_EncryptUpdate(sctx, et, &len, input, key_block + key_block + hash_block));
     assert(EVP_EncryptFinal_ex(sctx, et, &len));
 
-    iv2[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
-
     // Format the TCP buffer
-    memcpy(buf, et, key_block + key_block + hash_block);
+    memcpy(buf, iv, cipher_block);
+    memcpy(buf + cipher_block, et, key_block + key_block + hash_block);
 
-    write(connfd, (const unsigned char *)buf, key_block + key_block + hash_block); // Send over TCP
+    write(connfd, (const unsigned char *)buf, cipher_block + key_block + key_block + hash_block); // Send over TCP
 
-    read(connfd, (unsigned char *)buf, key_block + hash_block); // Receive over TCP
+    read(connfd, (unsigned char *)buf, cipher_block + key_block + hash_block); // Receive over TCP
+
+    memcpy(iv, buf, cipher_block); // Set initialization vector
+
+    // Format the input buffer for AES
+    memcpy(input, buf + cipher_block, key_block + hash_block);
 
     // Symmetrically decrypt the random bytes and authentication tag using the first shared secret
-    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
-    assert(EVP_DecryptUpdate(sctx, et, &len, buf, key_block + hash_block));
-    assert(EVP_DecryptFinal_ex(sctx, et, &len));
-
-    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector       
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, key_block + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));    
 
     // Store the random bytes and the authentication tag
     memcpy(rand2, et, key_block);
     memcpy(tag1, et + key_block, hash_block);
-    
+
+    // Format the input buffer for SHA-3
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, rand2, key_block);
+
     // Hash the random bytes
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
-    assert(EVP_DigestUpdate(hctx, rand2, key_block));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + key_block));
     assert(EVP_DigestFinal_ex(hctx, tag2, &len));
 
     assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the randombytes
@@ -301,8 +326,7 @@ int main() {
     free(rand2);
 
     // Free pointers used by AES and SHA-3
-    free(iv1);
-    free(iv2);
+    free(iv);
     free(tag1);
     free(tag2);
     free(et);
@@ -314,6 +338,7 @@ int main() {
     end = clock(); // Stop timer
     printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
 
+    close(connfd); // Close the connection
     close(sockfd); // Close the socket
     return 0;
 }
