@@ -1,4 +1,6 @@
 /* 
+ * server.c
+ *
  * Chris Cap
  * Copyright 2021 by QuSecure, Inc.
  */
@@ -29,255 +31,289 @@
 #include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/verify.c"
 #include "../crypto/kyber/Optimized_Implementation/crypto_kem/kyber512/symmetric-shake.c"
 
-#define PORT	8443 
+#define PORT 8443 
 
 int main() { 
 
-    int sockfd; // Socket
-    unsigned char *rec; // Buffer
-    struct sockaddr_in servaddr, cliaddr; // Client and server addresses
+    int sockfd; // Socket file descriptor
+    int connfd; // Connection file descriptor
+    struct sockaddr_in client_ipa; // Client IP address
 
-    int iv_block; // Length of the AES initialization vector
-    int ct_block; // Length of the AES ciphertext
-    int full_block; // Combined length of ciphertext and authentication tag
-    int input_block; // Length of inputs to randombytes_init()
-    int shift; // Shift constant
-    
+    int cipher_block; // Length of the AES cipher block
+    int key_block; // Length of the AES key
+    int hash_block; // Length of the SHA3 output
+    int max_block;  // Maximum buffer length
+
+    unsigned char *buf; // TCP buffer
     unsigned char *entropy; // Entropy input to randombytes_init()
     unsigned char *personal; // Personalization string input to randombytes_init()
-    unsigned char *spk; // Server KEM public key
-    unsigned char *sk; // KEM secret key
+    unsigned char *server_pk; // Server KEM public key
+    unsigned char *server_sk; // Server KEM secret key
     unsigned char *ct; // KEM ciphertext
     unsigned char *ss1; // First shared secret
-    unsigned char *cpk; // Client KEM public key
+    unsigned char *client_pk; // Client KEM public key
     unsigned char *ss2; // Second shared secret
     unsigned char *rand1; // Sent string of random bits
     unsigned char *rand2; // Received string of random bits
 
-    unsigned char *iv1; // AES initialization vector
-    unsigned char *iv2;
-    unsigned char *tag; // AES authentication tag
-    unsigned char *dt; // Decrypted/Encrypted text
-    unsigned char *final; // Block containing AES ciphertext and authentication tag
-    EVP_CIPHER_CTX *ctx; // AES ciphertext
+    unsigned char *iv1; // AES_GCM initialization vector for ss1
+    unsigned char *iv2; // AES_GCM initialization vector for ss2
+    unsigned char *tag1; // SHA3 authentication tag calculated
+    unsigned char *tag2; // SHA3 authentication tag received
+    unsigned char *et; // Encrypted/decrypted text
+    unsigned char *input; // Input buffer
+    unsigned char *uid; // Unique identifier
+    EVP_CIPHER_CTX *sctx; // AES context
+    EVP_MD_CTX *hctx; // SHA3 context
 
-    int i; // Loop counter
-    int j; // Loop counter
-    int n; // Used by AES and UDP
-    int len; // Used by UDP
-
-    // Initialize buffer for maximum input size with room for NULL terminator
-    rec = calloc(CRYPTO_PUBLICKEYBYTES + 1, 1);
-
-    // Creating socket file descriptor
-    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0 ) {
-        perror("socket creation failed");
-	exit(EXIT_FAILURE); 
-    }
-
-    // Initialize client and server addresses
-    memset(&servaddr, 0, sizeof(servaddr));
-    memset(&cliaddr, 0, sizeof(cliaddr));
-
-    // Fill in server information 
-    servaddr.sin_family = AF_INET; // IPv4 
-    servaddr.sin_addr.s_addr = INADDR_ANY; 
-    servaddr.sin_port = htons(PORT); 
+    FILE *in; // Server KEM public key storage
     
-    // Bind the socket with the server address 
-    if (bind(sockfd, (const struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) { 
-        perror("bind failed"); 
-        exit(EXIT_FAILURE); 
-    } 
+    int i; // Loop counter
+    int len; // Length variable
+
+    clock_t start; // Time of program start
+    clock_t end; // Time of program end
     
     // Initialize constants
-    iv_block = 12;
-    ct_block = 16;
-    full_block = 32;
-    input_block = 48;
-    shift = 60;
-    
+    cipher_block = 16;
+    key_block = 32;
+    hash_block = 48;
+    max_block = CRYPTO_CIPHERTEXTBYTES + CRYPTO_PUBLICKEYBYTES + hash_block;
+           
     // Initialize variables used by KEM
-    entropy = calloc(input_block, 1);
-    personal = calloc(input_block, 1);
-    cpk = calloc(CRYPTO_PUBLICKEYBYTES, 1);
+    buf = calloc(max_block, 1);
+    entropy = calloc(hash_block, 1);
+    personal = calloc(hash_block, 1);
+    client_pk = calloc(CRYPTO_PUBLICKEYBYTES, 1);
     ct = calloc(CRYPTO_CIPHERTEXTBYTES, 1);
     ss1 = calloc(CRYPTO_BYTES, 1);
-    spk = calloc(CRYPTO_PUBLICKEYBYTES, 1);
-    sk = calloc(CRYPTO_SECRETKEYBYTES, 1);
+    server_pk = calloc(CRYPTO_PUBLICKEYBYTES, 1);
+    server_sk = calloc(CRYPTO_SECRETKEYBYTES, 1);
     ss2 = calloc(CRYPTO_BYTES, 1);
-    rand1 = calloc(full_block, 1);
-    rand2 = calloc(full_block, 1);
+    rand1 = calloc(key_block, 1);
+    rand2 = calloc(key_block, 1);
     
-    // Initialize variables used by AES
-    iv1 = calloc(iv_block, 1);
-    iv2 = calloc(iv_block, 1);
-    tag = calloc(ct_block, 1);
-    dt = calloc(ct_block, 1);
-    final = calloc(full_block, 1);
-    ctx = EVP_CIPHER_CTX_new();
+    // Initialize variables used by AES and SHA3
+    iv1 = calloc(cipher_block, 1);
+    iv2 = calloc(cipher_block, 1);
+    tag1 = calloc(hash_block, 1);
+    tag2 = calloc(hash_block, 1);
+    et = calloc(max_block, 1);
+    input = calloc(max_block, 1);
+    uid = calloc(hash_block, 1);
+    sctx = EVP_CIPHER_CTX_new();
+    hctx = EVP_MD_CTX_new();
 
-    // Set randombytes_init() inputs
-    for (i = 0; i < input_block; i++) {
+    start = clock(); // Start timer
 
-        entropy[i] = 0xff;
-	personal[i] = 0xaa;
-    }
+    // Create socket file descriptor
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    assert(sockfd >= 0);
 
-    // Prepare the PRNG
-    randombytes_init(entropy, personal, 1);
-
-    // Generate KEM keypair
-    crypto_kem_keypair(spk, sk);
-
-    // Listen for KEM ciphertext
-    len = sizeof(cliaddr);
-    n = recvfrom(sockfd, (unsigned char *)rec, CRYPTO_CIPHERTEXTBYTES, MSG_WAITALL, ( struct sockaddr *) &cliaddr, &len); // Step 2
-    rec[n] = '\0';
-
-    // Copy buffer to ciphertext variable
-    memcpy(ct, rec, CRYPTO_CIPHERTEXTBYTES);
-
-    // Decapsulate the first shared secret
-    crypto_kem_dec(ss1, ct, sk); // Step 3
+    // Initialize client address
+    memset(&client_ipa, 0, sizeof(client_ipa)); 
+    client_ipa.sin_family = AF_INET; // IPv4 
+    client_ipa.sin_addr.s_addr = INADDR_ANY; 
+    client_ipa.sin_port = htons(PORT); 
     
-    // Listen for the client's KEM public key
-    for (i = 0; i < (CRYPTO_PUBLICKEYBYTES / ct_block) + !(!(CRYPTO_PUBLICKEYBYTES << shift)); i++) {
+    // Bind the socket with the client address 
+    assert(bind(sockfd, (const struct sockaddr *)&client_ipa, sizeof(client_ipa)) == 0);
 
-	n = recvfrom(sockfd, (unsigned char *)rec, full_block, MSG_WAITALL, (struct sockaddr *) &cliaddr, &len); // Step 5
-        rec[n] = '\0';
+    // Listen for a client connection
+    assert(listen(sockfd, PORT) == 0);
 
-        for (j = 0; j < ct_block; j++) tag[j] = rec[ct_block + j];
+    // Accept the client connection
+    len = sizeof(client_ipa);
+    connfd = accept(sockfd, (struct sockaddr *)&client_ipa, &len);
+    assert(connfd >= 0);
 
-	// Step 6
-	// Symmetrically decrypt the public key with the first shared secret
-        EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
-        EVP_DecryptUpdate(ctx, dt, &len, rec, ct_block);
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, ct_block, (void*)tag);
-        n = EVP_DecryptFinal_ex(ctx, dt, &len);
-        assert(n == 1); // Authenticate the ciphertext
+    // Set the entropy input and personalization string
+    memset(entropy, (int)0x4f, hash_block);
+    memset(personal, (int)0xc3, hash_block);
 
-        iv1[iv_block - 1] += (unsigned char) 0x01;
+    randombytes_init(entropy, personal, 1); // Prepare the PRNG
 
-        for (j = 0; j < ct_block; j++) cpk[(i * ct_block) + j] = dt[j]; // Store the client's KEM public key
-    }
+    crypto_kem_keypair(server_pk, server_sk); // Generate server KEM keypair
+
+    // Store the server KEM public key to file
+    in = fopen("server.key", "w");
+    fwrite(server_pk, 1, CRYPTO_PUBLICKEYBYTES, in);
+    fclose(in);
+
+    read(connfd, (unsigned char *)buf, max_block); // Receive over TCP
     
-    // Encapsulate the second shared secret
-    crypto_kem_enc(ct, ss2, cpk); // Step 7
+    memcpy(ct, buf, CRYPTO_CIPHERTEXTBYTES); // Store ciphertext variable
 
-    // Send ciphertext to client
-    sendto(sockfd, (const unsigned char *)ct, CRYPTO_CIPHERTEXTBYTES, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, sizeof(servaddr)); // Step 8
+    crypto_kem_dec(ss1, ct, server_sk); // Decapsulate the first shared secret
 
-    // Listen for random bytes from client
-    for (i = 0; i < full_block / ct_block; i++) {
+    // Symmetrically decrypt the public key, MAC address, and authentication tag using the first shared secret
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
+    assert(EVP_DecryptUpdate(sctx, et, &len, buf + CRYPTO_CIPHERTEXTBYTES, CRYPTO_PUBLICKEYBYTES + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
 
-	n = recvfrom(sockfd, (unsigned char *)rec, full_block, MSG_WAITALL, (struct sockaddr *) &cliaddr, &len); // Step 12
-        rec[n] = '\0';
+    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
 
-	for (j = 0; j < ct_block; j++) tag[j] = rec[ct_block + j]; // Set the authentication tag
+    // Store the client public key and authentication tag, and format the input buffer for SHA-3
+    memcpy(input, ct, CRYPTO_CIPHERTEXTBYTES);
+    memcpy(client_pk, et, CRYPTO_PUBLICKEYBYTES);
+    memcpy(tag1, et + CRYPTO_PUBLICKEYBYTES, hash_block);
+    memcpy(input + CRYPTO_CIPHERTEXTBYTES, client_pk, CRYPTO_PUBLICKEYBYTES);
 
-	// Step 13
-	// Symmetrically decrypt the random bytes with the first shared secret 
-        EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
-        EVP_DecryptUpdate(ctx, dt, &len, rec, ct_block);
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, ct_block, (void*)tag);
-        n = EVP_DecryptFinal_ex(ctx, dt, &len);
-        assert(n == 1); // Authenticate the ciphertext
+    // Hash the ciphertext and public key
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, CRYPTO_CIPHERTEXTBYTES + CRYPTO_PUBLICKEYBYTES));
+    assert(EVP_DigestFinal_ex(hctx, tag2, &len));
 
-        iv1[iv_block - 1] += (unsigned char) 0x01;
+    assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the ciphertext and public key
+ 
+    // Use flag to demo and debug
+    #ifdef DEBUG
+        printf("Server Public Key: ");
+        for (i = 0; i < CRYPTO_PUBLICKEYBYTES; i++) printf("%02x", server_pk[i]); printf("\n\n");
+        printf("Shared Secret 1: ");
+        for (i = 0; i < key_block; i++) printf("%02x", ss1[i]); printf("\n\n");
+    #endif
+ 
+    // Hash the public key
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, client_pk, CRYPTO_PUBLICKEYBYTES));
+    assert(EVP_DigestFinal_ex(hctx, uid, &len));
 
-        for (j = 0; j < ct_block; j++) rand2[(i * ct_block) + j] = dt[j]; // Store the random bytes
-    }
+    assert(memcmp(uid, uid, hash_block) == 0); // Database placeholder
 
-    // Send the random bytes to the client
-    for (i = 0; i < full_block /ct_block; i++) {
-
-	// Step 14
-	// Symmetrically encrypt the random bytes with the second shared secret
-        EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv2);
-	EVP_EncryptUpdate(ctx, dt, &len, rand2 + (i * ct_block), ct_block);
-	EVP_EncryptFinal_ex(ctx, dt, &len);
-	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*)tag);
-
-        iv2[iv_block - 1] += (unsigned char) 0x01;
-
-	// Format the block
-	for (j = 0; j < ct_block; j++) {
-	    final[j] = dt[j];
-	    final[ct_block + j] = tag[j];
-	}
-
-	sendto(sockfd, (const unsigned char *)final, full_block, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, sizeof(servaddr)); // Step 15
-    }
-
-    // Random bytes used for authentication
-    randombytes(rand1, 32); // Step 18
-
-    // Send the randombytes to the client
-    for (i = 0; i < full_block /ct_block; i++) {
-
-	// Step 19
-	// Symmetrically encrypt the random bytes with the first shared secret
-        EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss1, iv1);
-	EVP_EncryptUpdate(ctx, dt, &len, rand1 + (i * ct_block), ct_block);
-	EVP_EncryptFinal_ex(ctx, dt, &len);
-	EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, ct_block, (void*)tag);
-
-        iv1[iv_block - 1] += (unsigned char) 0x01;
-	
-	// Format the block
-	for (j = 0; j < ct_block; j++) {
-	    final[j] = dt[j];
-	    final[ct_block + j] = tag[j];
-	}
-
-	sendto(sockfd, (const unsigned char *)final, full_block, MSG_CONFIRM, (const struct sockaddr *) &cliaddr, sizeof(servaddr)); // Step 20
-    }
-
-    // Listen for random bytes from the client
-    for (i = 0; i < full_block / ct_block; i++) {
-
-	n = recvfrom(sockfd, (unsigned char *)rec, full_block, MSG_WAITALL, (struct sockaddr *) &cliaddr, &len); // Step 23
-        rec[n] = '\0';
-
-	for (j = 0; j < ct_block; j++) tag[j] = rec[ct_block + j]; // Set the authentication tag
-
-	// Step 24
-	// Symmetrically decrypt the random bytes using the second shared secret
-        EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, ss2, iv2);
-        EVP_DecryptUpdate(ctx, dt, &len, rec, ct_block);
-        EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, ct_block, (void*)tag);
-        n = EVP_DecryptFinal_ex(ctx, dt, &len);
-        assert(n == 1); // Authenticate the ciphertext
-
-        iv2[iv_block - 1] += (unsigned char) 0x01;
+    crypto_kem_enc(ct, ss2, client_pk); // Encapsulate the second shared secret
         
-	for (j = 0; j < ct_block; j++) rand2[(i * ct_block) + j] = dt[j]; // Store the random bytes
-    }
+    // Hash the ciphertext
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, ct, CRYPTO_CIPHERTEXTBYTES));
+    assert(EVP_DigestFinal_ex(hctx, tag1, &len));
 
-    // Compare the two strings of random bytes to ensure they match
-    for (i = 0; i < full_block; i++) assert(rand1[i] == rand2[i]); // Step 25
+    // Format the input buffer for AES
+    memcpy(input, ct, CRYPTO_CIPHERTEXTBYTES);
+    memcpy(input + CRYPTO_CIPHERTEXTBYTES, tag1, hash_block);
 
-    free(rec);
+    // Use flag to demo and debug
+    #ifdef DEBUG
+        printf("Client Public Key: ");
+        for (i = 0; i < CRYPTO_PUBLICKEYBYTES; i++) printf("%02x", client_pk[i]); printf("\n\n");
+        printf("Shared Secret 2: ");
+        for (i = 0; i < key_block; i++) printf("%02x", ss2[i]); printf("\n\n");
+    #endif
+
+    // Symmetrically encrypt the ciphertext and authentication tag with the first shared secret
+    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
+    assert(EVP_EncryptUpdate(sctx, et, &len, input, CRYPTO_CIPHERTEXTBYTES + hash_block));
+    assert(EVP_EncryptFinal_ex(sctx, et, &len));
+
+    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
+
+    memcpy(buf, et, CRYPTO_CIPHERTEXTBYTES + hash_block); // Copy encrypted data to TCP buffer
+
+    write(connfd, (const unsigned char *)buf, CRYPTO_CIPHERTEXTBYTES + hash_block); // Send over TCP
+
+    read(connfd, (unsigned char *)buf, key_block + hash_block); // Receive over TCP
+    
+    // Symmetrically decrypt the random bytes and the authentication tag using the first shared secret
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
+    assert(EVP_DecryptUpdate(sctx, et, &len, buf, key_block + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
+
+    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
+
+    // Store the string of random bytes and the authentication tag
+    memcpy(rand2, et, key_block);
+    memcpy(tag1, et + key_block, hash_block);
+
+    // Hash the random bytes
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, rand2, key_block));
+    assert(EVP_DigestFinal_ex(hctx, tag2, &len));
+
+    assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the random bytes
+    
+    randombytes(rand1, key_block); // Generate random bytes for authentication
+
+    // Format the input buffer for SHA-3
+    memcpy(input, rand2, key_block);
+    memcpy(input + key_block, rand1, key_block);
+    
+    // Hash the two strings of random bytes
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, key_block + key_block));
+    assert(EVP_DigestFinal_ex(hctx, tag1, &len));
+
+    // Append the authentication tag to the input buffer
+    memcpy(input + key_block + key_block, tag1, hash_block);
+
+    // Symmetrically encrypt the two strings and the authentication tag using the second shared secret
+    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss2, iv2));
+    assert(EVP_EncryptUpdate(sctx, et, &len, input, key_block + key_block + hash_block));
+    assert(EVP_EncryptFinal_ex(sctx, et, &len));
+
+    iv2[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector
+
+    // Format the TCP buffer
+    memcpy(buf, et, key_block + key_block + hash_block);
+
+    write(connfd, (const unsigned char *)buf, key_block + key_block + hash_block); // Send over TCP
+
+    read(connfd, (unsigned char *)buf, key_block + hash_block); // Receive over TCP
+
+    // Symmetrically decrypt the random bytes and authentication tag using the first shared secret
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv1));
+    assert(EVP_DecryptUpdate(sctx, et, &len, buf, key_block + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
+
+    iv1[cipher_block - 1] += (unsigned char) 0x01; // Increment the initialization vector       
+
+    // Store the random bytes and the authentication tag
+    memcpy(rand2, et, key_block);
+    memcpy(tag1, et + key_block, hash_block);
+    
+    // Hash the random bytes
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, rand2, key_block));
+    assert(EVP_DigestFinal_ex(hctx, tag2, &len));
+
+    assert(memcmp(tag1, tag2, hash_block) == 0); // Authenticate the randombytes
+
+    // Use flag to demo and debug
+    #ifdef DEBUG
+        printf("Random Sent: ");
+        for (i = 0; i < key_block; i++) printf("%02x", rand1[i]); printf("\n\n");
+        printf("Random Received: ");
+        for (i = 0; i < key_block; i++) printf("%02x", rand2[i]); printf("\n\n");
+    #endif
+    
+    assert(memcmp(rand1, rand2, key_block) == 0); // Authenticate the client by comparing the two strings
+
+    // Free pointers used by KEM
+    free(buf);
     free(entropy);
     free(personal);
-    free(spk);
-    free(sk);
+    free(server_pk);
+    free(server_sk);
     free(ct);
     free(ss1);
-    free(cpk);
+    free(client_pk);
     free(ss2);
     free(rand1);
     free(rand2);
 
+    // Free pointers used by AES and SHA-3
     free(iv1);
     free(iv2);
-    free(tag);
-    free(dt);
-    free(final);
-    EVP_CIPHER_CTX_free(ctx);
+    free(tag1);
+    free(tag2);
+    free(et);
+    free(input);
+    free(uid);
+    EVP_CIPHER_CTX_free(sctx);
+    EVP_MD_CTX_free(hctx);
 
-    // Close the socket
-    close(sockfd);
+    end = clock(); // Stop timer
+    printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
+
+    close(sockfd); // Close the socket
     return 0;
 }
