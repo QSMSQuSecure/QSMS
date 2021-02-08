@@ -37,6 +37,7 @@ int main() {
     
     int sockfd;  // Socket file descriptor
     struct sockaddr_in server_ipa; // Server IP address
+    struct sockaddr_in peer_ipa;
 
     int cipher_block; // Length of the AES cipher block
     int key_block; // Length of the AES key
@@ -63,6 +64,10 @@ int main() {
     unsigned char *input; // Input buffer
     EVP_CIPHER_CTX *sctx; // AES context
     EVP_MD_CTX *hctx; // SHA3 context
+
+    unsigned char *session;
+    char *message;
+    int mlen;
         
     FILE *in; // Server KEM public key storage
     
@@ -103,7 +108,8 @@ int main() {
     sctx = EVP_CIPHER_CTX_new();
     hctx = EVP_MD_CTX_new();
 
-    start = clock(); // Start timer
+    session = calloc(key_block, 1);
+    message = calloc(80, 1);
 
     // Create socket file descriptor for TCP socket
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -122,6 +128,8 @@ int main() {
     memset(entropy, 0x38, hash_block);
     memset(personal, 0xf9, hash_block);
     
+    start = clock(); // Start timer
+
     randombytes_init(entropy, personal, 1); // Prepare the PRNG
 
     // Read server public key from file
@@ -299,6 +307,68 @@ int main() {
 
     write(sockfd, (const unsigned char *)buf, cipher_block + key_block + hash_block); // Send over TCP
 
+    read(sockfd, (unsigned char *)buf, cipher_block + key_block + hash_block);
+
+    memcpy(iv, buf, cipher_block);
+
+    memcpy(input, buf + cipher_block, key_block + hash_block);
+
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, key_block + hash_block));
+    assert(EVP_DecryptFinal(sctx, et, &len));
+
+    memcpy(session, et, key_block);
+    memcpy(tag1, et + key_block, hash_block);
+
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, session, key_block);
+    
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + key_block));
+    assert(EVP_DigestFinal(hctx, tag2, &len));
+
+    assert(memcmp(tag1, tag2, hash_block) == 0);
+
+    close(sockfd);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    assert(sockfd >= 0);
+
+    // Initialize server address
+    memset(&peer_ipa, 0, sizeof(peer_ipa));
+    peer_ipa.sin_family = AF_INET;
+    peer_ipa.sin_addr.s_addr = inet_addr("172.28.209.139"); // Change to match peer
+    peer_ipa.sin_port = htons(PORT);
+   
+    // Connect to the TCP socket
+    assert(connect(sockfd, (struct sockaddr *)&peer_ipa, sizeof(peer_ipa)) == 0);
+
+    message = "This message was sent over a post-quantum encrypted tunnel created by QuSecure.";
+    mlen = strlen(message);
+
+    randombytes(iv, cipher_block);
+
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, message, mlen + 1);
+
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + mlen + 1));
+    assert(EVP_DigestFinal_ex(hctx, tag1, &len));
+
+    memcpy(input, message, mlen + 1);
+    memcpy(input + mlen + 1, tag1, hash_block);
+
+    assert(EVP_EncryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, session, iv));
+    assert(EVP_EncryptUpdate(sctx, et, &len, input, mlen + 1 + hash_block));
+    assert(EVP_EncryptFinal_ex(sctx, et, &len));
+
+    memcpy(buf, iv, cipher_block);
+    memcpy(buf + cipher_block, et, mlen + 1 + hash_block);
+
+    write(sockfd, (const unsigned char *)buf, cipher_block + mlen + 1 + hash_block);
+
+    end = clock(); // Stop timer
+    printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
+    
     // Free pointers used by KEM
     free(buf);
     free(entropy);
@@ -321,10 +391,8 @@ int main() {
     free(input);
     EVP_CIPHER_CTX_free(sctx);
     EVP_MD_CTX_free(hctx);
+    free(session);
 
-    end = clock(); // Stop timer
-    printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
-    
     close(sockfd); // Close the socket
     return 0;
 }

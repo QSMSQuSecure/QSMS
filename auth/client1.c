@@ -35,8 +35,11 @@
 
 int main() { 
     
-    int sockfd;  // Socket file descriptor
+    int sockfd1;  // Socket file descriptor
+    int sockfd2;  // Socket file descriptor
+    int connfd;
     struct sockaddr_in server_ipa; // Server IP address
+    struct sockaddr_in peer_ipa;
 
     int cipher_block; // Length of the AES cipher block
     int key_block; // Length of the AES key
@@ -63,6 +66,9 @@ int main() {
     unsigned char *input; // Input buffer
     EVP_CIPHER_CTX *sctx; // AES context
     EVP_MD_CTX *hctx; // SHA3 context
+
+    unsigned char *session;
+    char *message;
         
     FILE *in; // Server KEM public key storage
     
@@ -103,11 +109,12 @@ int main() {
     sctx = EVP_CIPHER_CTX_new();
     hctx = EVP_MD_CTX_new();
 
-    start = clock(); // Start timer
+    session = calloc(key_block, 1);
+    message = calloc(80, 1);
 
     // Create socket file descriptor for TCP socket
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    assert(sockfd >= 0);
+    sockfd1 = socket(AF_INET, SOCK_STREAM, 0);
+    assert(sockfd1 >= 0);
 
     // Initialize server address
     memset(&server_ipa, 0, sizeof(server_ipa));
@@ -116,12 +123,14 @@ int main() {
     server_ipa.sin_port = htons(PORT);
    
     // Connect to the TCP socket
-    assert(connect(sockfd, (struct sockaddr *)&server_ipa, sizeof(server_ipa)) == 0);
+    assert(connect(sockfd1, (struct sockaddr *)&server_ipa, sizeof(server_ipa)) == 0);
 
     // Set entropy input and personalization string
     memset(entropy, 0xac, hash_block);
     memset(personal, 0x23, hash_block);
     
+    start = clock(); // Start timer
+
     randombytes_init(entropy, personal, 1); // Prepare the PRNG
 
     // Read server public key from file
@@ -169,9 +178,9 @@ int main() {
     memcpy(buf + CRYPTO_CIPHERTEXTBYTES, iv, cipher_block);
     memcpy(buf + CRYPTO_CIPHERTEXTBYTES + cipher_block, et, CRYPTO_PUBLICKEYBYTES + hash_block);
 
-    write(sockfd, (const unsigned char *)buf, max_block); // Send over TCP
+    write(sockfd1, (const unsigned char *)buf, max_block); // Send over TCP
 
-    read(sockfd, (unsigned char *)buf, cipher_block + CRYPTO_CIPHERTEXTBYTES + hash_block); // Receive over TCP
+    read(sockfd1, (unsigned char *)buf, cipher_block + CRYPTO_CIPHERTEXTBYTES + hash_block); // Receive over TCP
 
     memcpy(iv, buf, cipher_block); // Store initialization vector
 
@@ -212,7 +221,7 @@ int main() {
 
     // Format the input buffer for SHA-3
     memcpy(input, iv, cipher_block);
-    memcpy(input + cipher_block, rand1, cipher_block + key_block);
+    memcpy(input + cipher_block, rand1, key_block);
 
     // Hash the initialization vector and random bytes
     assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
@@ -232,9 +241,9 @@ int main() {
     memcpy(buf, iv, cipher_block);
     memcpy(buf + cipher_block, et, key_block + hash_block);
 
-    write(sockfd, (const unsigned char *)buf, cipher_block + key_block + hash_block); // Send over TCP
+    write(sockfd1, (const unsigned char *)buf, cipher_block + key_block + hash_block); // Send over TCP
     
-    read(sockfd, (unsigned char *)buf, cipher_block + key_block + key_block + hash_block); // Receive over TCP
+    read(sockfd1, (unsigned char *)buf, cipher_block + key_block + key_block + hash_block); // Receive over TCP
 
     memcpy(iv, buf, cipher_block); // Store initialization vector
 
@@ -297,8 +306,77 @@ int main() {
     memcpy(buf, iv, cipher_block);
     memcpy(buf + cipher_block, et, key_block + hash_block);
 
-    write(sockfd, (const unsigned char *)buf, cipher_block + key_block + hash_block); // Send over TCP
+    write(sockfd1, (const unsigned char *)buf, cipher_block + key_block + hash_block); // Send over TCP
 
+    read(sockfd1, (unsigned char *) buf, cipher_block + key_block + hash_block);
+
+    memcpy(iv, buf, cipher_block); // Set initialization vector
+    
+    // Format the input buffer
+    memcpy(input, buf + cipher_block, key_block + hash_block);
+
+    // Symmetrically decrypt two strings of random bytes and the authentication tag using the first shared secret
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, ss1, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, key_block + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
+
+    memcpy(session, et, key_block);
+    memcpy(tag1, et + key_block, hash_block);
+    
+    // Format the input buffer for SHA-3
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, session, key_block);
+
+    // Hash the second string of random bytes
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + key_block));
+    assert(EVP_DigestFinal_ex(hctx, tag2, &len));
+
+    assert(memcmp(tag1, tag2, hash_block) == 0);
+    
+    memset(&peer_ipa, 0, sizeof(peer_ipa));
+    peer_ipa.sin_family = AF_INET;
+    peer_ipa.sin_addr.s_addr = INADDR_ANY;
+    peer_ipa.sin_port = htons(PORT);
+
+    sockfd2 = socket(AF_INET, SOCK_STREAM, 0); 
+    assert(sockfd2 >= 0);
+
+    assert(bind(sockfd2, (const struct sockaddr *)&peer_ipa, sizeof(peer_ipa)) == 0);
+
+    assert(listen(sockfd2, PORT) == 0);
+
+    len = sizeof(peer_ipa);
+    connfd = accept(sockfd2, (struct sockaddr *)&peer_ipa, &len);
+    assert(connfd >= 0);
+
+    read(connfd, (unsigned char *)buf, cipher_block + 80 + hash_block);
+
+    memcpy(iv, buf, cipher_block);
+
+    memcpy(input, buf + cipher_block, 80 + hash_block);
+
+    assert(EVP_DecryptInit_ex(sctx, EVP_aes_256_ctr(), NULL, session, iv));
+    assert(EVP_DecryptUpdate(sctx, et, &len, input, 80 + hash_block));
+    assert(EVP_DecryptFinal_ex(sctx, et, &len));
+
+    memcpy(message, et, 80);
+    memcpy(tag1, et + 80, hash_block);
+
+    memcpy(input, iv, cipher_block);
+    memcpy(input + cipher_block, message, 80);
+
+    assert(EVP_DigestInit_ex(hctx, EVP_sha3_384(), NULL));
+    assert(EVP_DigestUpdate(hctx, input, cipher_block + 80));
+    assert(EVP_DigestFinal_ex(hctx, tag2, &len));
+
+    assert(memcmp(tag1, tag2, hash_block) == 0);
+
+    printf("%s\n", message);
+    
+    end = clock(); // Stop timer
+    printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
+    
     // Free pointers used by KEM
     free(buf);
     free(entropy);
@@ -322,9 +400,8 @@ int main() {
     EVP_CIPHER_CTX_free(sctx);
     EVP_MD_CTX_free(hctx);
 
-    end = clock(); // Stop timer
-    printf("Time: %f seconds\n", ((float)end - (float)start) / (float)CLOCKS_PER_SEC); // Print time
-    
-    close(sockfd); // Close the socket
+    close(sockfd1); // Close the socket
+    close(sockfd2);
+    close(connfd);
     return 0;
 }
